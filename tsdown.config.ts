@@ -17,7 +17,7 @@ export default defineConfig([
     target: 'node22',
     fixedExtension: false,
     dts: true,
-    external: [/^@deepseek-ai\//, 'react', 'react-dom', 'zod'],
+    external: [/^@deepseek-ai\//, /^react(\/.*)?$/, /^react-dom(\/.*)?$/, 'zod'],
   },
   {
     entry: { 'client/index': 'src/client/index.ts' },
@@ -26,6 +26,6 @@ export default defineConfig([
     platform: 'browser',
     fixedExtension: false,
     dts: true,
-    external: [/^@deepseek-ai\//, 'react', 'react-dom', 'zod'],
+    external: [/^@deepseek-ai\//, /^react(\/.*)?$/, /^react-dom(\/.*)?$/, 'zod'],
   },
 ]);
