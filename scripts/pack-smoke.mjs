@@ -5,7 +5,7 @@
  * pnpm 定位：经 `pnpm pack:smoke` 运行时取 process.env.npm_execpath；否则回退 PNPM_MJS / PATH 的 pnpm。
  */
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, readdirSync, readFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, readdirSync, readFileSync, rmSync, symlinkSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -30,6 +30,9 @@ try {
   execFileSync('tar', ['-xzf', join(tmp, found), '-C', tmp], { stdio: 'pipe' });
 
   const pkgDir = join(tmp, 'package');
+  // 依赖解析：解包目录无 node_modules，链接工作区依赖树模拟安装后形态
+  // （zod 走 dependencies、@deepseek-ai/* 走 peerDeps 宿主提供，冒烟只验证入口可装载）。
+  symlinkSync(join(root, 'node_modules'), join(pkgDir, 'node_modules'), 'junction');
   const mod = await import(pathToFileURL(join(pkgDir, 'dist/index.js')).href);
   if (mod.name !== 'dsh-agent-teams-concourse') throw new Error(`入口 name 契约破坏：${mod.name}`);
   if (typeof mod.apply !== 'function') throw new Error('入口缺少 apply()');
