@@ -1,0 +1,12 @@
+# dsh-agent-teams-concourse bundle patch：挂载组织层插件。
+#
+# 设计要点（详见 DEVELOPMENT_PLAN.md 与调研报告）：
+#  · NFR-1 惰性安装：enabled 缺省为 false，未启用时零行为变更、零监听器。
+#  · 复用官方 agent-team 底座（dsh-experimental-agent-team，由官方 profile 包提供）；
+#    官方缺席时插件降级为「自有任务图 + 无跨顶点邮箱」，不崩溃（R-1）。
+#  · P3 起在此补充 Config 项（schemastery schema）。
+- insert:
+    - id: concourse
+      name: dsh-agent-teams-concourse
+      # config:
+      #   enabled: false   # 总开关（P3 生效）：true 才注册工具与服务

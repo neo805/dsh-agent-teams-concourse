@@ -1,0 +1,5 @@
+# 单包仓库：本文件只为声明构建脚本白名单（pnpm 10+ 约定位置）。
+allowBuilds:
+  esbuild: true
+onlyBuiltDependencies:
+  - esbuild
