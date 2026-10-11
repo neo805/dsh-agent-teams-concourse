@@ -1,0 +1,54 @@
+{"text":"帮我解释一下这段代码是干嘛的","expect":{"effort":"low","tier":"cheap"}}
+{"text":"总结一下这篇文章的重点","expect":{"effort":"low","tier":"cheap"}}
+{"text":"看一下这个报错是什么意思","expect":{"effort":"low","tier":"cheap"}}
+{"text":"帮我梳理一下这个项目的目录结构","expect":{"effort":"low","tier":"cheap"}}
+{"text":"这段 SQL 是做什么的，说明一下","expect":{"effort":"low","tier":"cheap"}}
+{"text":"explain 一下这个函数为啥返回空","expect":{"effort":"low","tier":"cheap"}}
+{"text":"帮我读一下这个配置文件，说说每段干啥","expect":{"effort":"low","tier":"cheap"}}
+{"text":"这个报错堆栈帮我分析一下原因","expect":{"effort":"low","tier":"cheap"}}
+{"text":"把这段话翻译成中文，顺便解释下专业词","expect":{"effort":"low","tier":"cheap"}}
+{"text":"什么是幂等性？举个例子说明","expect":{"effort":"low","tier":"cheap"}}
+{"text":"看一下这个参数是干嘛的，说明一下就行","expect":{"effort":"low","tier":"cheap"}}
+{"text":"analyze 这个日志里的错误分布","expect":{"effort":"low","tier":"cheap"}}
+{"text":"总结一下今天我们讨论的结论","expect":{"effort":"low","tier":"cheap"}}
+{"text":"解释一下 CAP 定理，通俗点","expect":{"effort":"low","tier":"cheap"}}
+{"text":"帮我读一下 README 说说怎么跑起来","expect":{"effort":"low","tier":"cheap"}}
+{"text":"这个 diff 改了什么，帮我分析下","expect":{"effort":"low","tier":"cheap"}}
+{"text":"梳理下这两个接口的出入参差异","expect":{"effort":"low","tier":"cheap"}}
+{"text":"实现一个用户登录接口，带 JWT","expect":{"effort":"default","tier":"balanced"}}
+{"text":"帮我开发一个简单的待办事项页面","expect":{"effort":"default","tier":"balanced"}}
+{"text":"修复列表页分页越界的 bug","expect":{"effort":"default","tier":"balanced"}}
+{"text":"接入第三方支付回调，做好验签","expect":{"effort":"default","tier":"balanced"}}
+{"text":"实现一个本地缓存层，支持过期","expect":{"effort":"default","tier":"balanced"}}
+{"text":"开发一个 CLI 小工具，支持改文件名","expect":{"effort":"default","tier":"balanced"}}
+{"text":"修复移动端布局错乱的问题","expect":{"effort":"default","tier":"balanced"}}
+{"text":"implement a retry wrapper for fetch","expect":{"effort":"default","tier":"balanced"}}
+{"text":"build 一个静态站点生成器的雏形","expect":{"effort":"default","tier":"balanced"}}
+{"text":"fix the race condition in the queue consumer","expect":{"effort":"default","tier":"balanced"}}
+{"text":"给配置中心接入热更新能力","expect":{"effort":"default","tier":"balanced"}}
+{"text":"实现 WebSocket 断线重连逻辑","expect":{"effort":"default","tier":"balanced"}}
+{"text":"开发一个图片压缩上传组件","expect":{"effort":"default","tier":"balanced"}}
+{"text":"修复导出 Excel 时中文乱码","expect":{"effort":"default","tier":"balanced"}}
+{"text":"做一个简单的表单校验库","expect":{"effort":"default","tier":"balanced"}}
+{"text":"实现一个基于事件的插件加载器","expect":{"effort":"default","tier":"balanced"}}
+{"text":"1做登录 2做注册 3做找回密码，先出接口","expect":{"effort":"default","tier":"balanced"}}
+{"text":"对整个鉴权模块做一次安全审计，列出所有风险点","expect":{"effort":"high","tier":"premium"}}
+{"text":"审计一下这个仓库有没有硬编码的密钥","expect":{"effort":"high","tier":"premium"}}
+{"text":"检查所有接口是否存在 SQL 注入漏洞","expect":{"effort":"high","tier":"premium"}}
+{"text":"做一次权限体系的安全评审，重点关注越权","expect":{"effort":"high","tier":"premium"}}
+{"text":"帮我对上传功能做安全测试，看能不能传 webshell","expect":{"effort":"high","tier":"premium"}}
+{"text":"security audit of the auth pipeline, list all findings","expect":{"effort":"high","tier":"premium"}}
+{"text":"排查这个服务有没有敏感信息泄漏，日志要脱敏","expect":{"effort":"high","tier":"premium"}}
+{"text":"审计第三方依赖的已知漏洞并给出整改方案","expect":{"effort":"high","tier":"premium"}}
+{"text":"评估当前密钥管理方案的安全性，给出整改建议","expect":{"effort":"high","tier":"premium"}}
+{"text":"对内网管理后台做渗透测试前的攻击面审计","expect":{"effort":"high","tier":"premium"}}
+{"text":"检查代码里所有涉及权限校验的路径是否有绕过","expect":{"effort":"high","tier":"premium"}}
+{"text":"对支付回调做安全审计，重点看验签和重放","expect":{"effort":"high","tier":"premium"}}
+{"text":"看看有没有 SSRF 漏洞，特别是图片抓取那块","expect":{"effort":"high","tier":"premium"}}
+{"text":"审计会话管理：token 生成、过期、注销全链路","expect":{"effort":"high","tier":"premium"}}
+{"text":"数据导出功能涉及隐私字段，评估脱敏方案","expect":{"effort":"high","tier":"premium"}}
+{"text":"做一次完整的依赖供应链安全排查","expect":{"effort":"high","tier":"premium"}}
+{"text":"review 这段加解密代码，找潜在的密钥泄露","expect":{"effort":"high","tier":"premium"}}
+{"text":"设计并实现插件内核的任务调度层：1做拓扑建模 2做通信门禁 3做预算台账 4做持久化恢复。要求纯函数零宿主依赖，边界方向 kernel→host→service→tools 单向不可逆；每层先写测试再实现；所有失败路径必须 fail-loud 并附候选列表；运行期零审批，计划期一次审批收口；回声防护要有 dedup、限流、熔断三件套；跨顶点消息走收件侧权威判定，发送侧只做早失败优化；另外把文档和示例也补齐","expect":{"effort":"high","tier":"balanced"}}
+{"text":"把旧系统的订单模块迁移到新架构，顺便把数据也迁了","expect":{"effort":"low","tier":"balanced"}}
+{"text":"帮我分析一下这个持续三天的线上抖动：高峰期 CPU 偶发抖到 95%，GC 次数同步飙升，dump 里 char[] 占用过半，怀疑是某个接口的字符串拼接放大了分配速率。请结合 GC 日志、慢查询和最近三次发布记录，梳理出最可疑的三个方向，给出每个方向的验证方法和回滚预案，先不要动代码，只要分析结论和排查路径","expect":{"effort":"default","tier":"balanced"}}
