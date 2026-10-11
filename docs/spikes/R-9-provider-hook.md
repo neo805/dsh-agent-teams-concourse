@@ -3,7 +3,7 @@
 |  |  |
 | --- | --- |
 | 日期 | 2026-10-11 |
-| 状态 | **源码层已判定；运行时探针待执行** |
+| 状态 | **源码层已判定；运行时探针已完成（2026-10-11，全部符合预期）** |
 | 结论 | **R-9 原命题证伪 → 按预案切路线 A**（自行拉起子代理；虚拟拓扑与 UI 不受影响） |
 
 ## 1 · 验证命题
@@ -83,4 +83,39 @@ MVP 口径：JSONL 追加日志 + 启动时回放（§4.6 官方"日志为唯一
 
 ## 6 · 运行时记录
 
-（待 P2 执行后填写）
+执行环境：scratch profile `r9probe`（`~/.dsh/profiles/r9probe`，由 headless 模板派生，
+不影响 web/desktop profile）；探针插件 `docs/spikes/probe/`（link 安装）+
+官方 `@deepseek-ai/dsh-experimental-agent-team` / `-tool-agent-team@0.2.0-rc.2`，
+tool-agent-team 配置 `freshProvider: concourse-probe`。落盘 `%TEMP%/concourse-probe.jsonl`。
+
+**探针甲（确认证伪）— ✅ 符合预期**
+headless 会话内 `spawn_teammate` 成功创建队友并收到 "OK"；探针落盘显示
+provider 的 `prepareContinuable` 入参键集为 `["sessionId","parent","signal"]`，
+`hasAgentOptions:false`、`hasToolFilter:false`——continuable 路径上 provider
+只能贡献 seed，无法注入 agentOptions。R-9 证伪在运行时坐实。
+
+**探针乙（确认路线 A）— ✅ 符合预期**
+`ctx.subagents.startContinuable({provider:'concourse-probe', request:{…,
+agentOptions:{model:'deepseek-chat', reasoningEffort:'low'}, toolFilter:{deny:['pwsh']}}})`
+被完整接受，子代理（childId `eb8d3b6b-…`）真实运行并回复 "OK"。
+负面对照：`model:'concourse-nonexistent-model-xyz'` 时子代理创建后失败离场
+（`ff5716a7-…`），证明 model 字段端到端落入子代理路由而非被静默忽略。
+
+**附带验证（§9.3）**
+- maxDepth / maxActiveSubagents：dsh-subagent 插件 Config 项（lib/types/index.js:76-77），
+  默认 1 / 8、volatile、可按 profile patch 对 id `subagent` 覆盖；超限 fail-loud
+  （`SubagentDepthError`），并发由 pool.reserve 上限闸门。供 feed 计划期容量校验引用。
+- `ctx.tools.guard()` 对官方 scoped 工具的覆盖：路线 A 不依赖官方 scoped 工具链，
+  未做单独运行时验证（参考项，关闭）。
+
+**探针自身修复记录（施工中发现）**
+1. 缺 `export const inject = ['subagents','tools']` → `cannot get property "subagents"
+   without inject`，插件未激活。
+2. `ctx.tools.register` 收裸对象抛错 → 插件激活回滚，连带 provider 注册被 effect
+   撤销（表现为下游 `NO_PROVIDER`，极具迷惑性）。改用 `defineTool`（`@deepseek-ai/dsh-tools`），
+   output schema 需闭合对象（`additionalProperties:false`）。
+   **教训（已写入 P3 约束）：concourse 插件必须声明 inject；工具一律 defineTool；
+   apply 中任何一步抛错会导致整个插件 effect 回滚。**
+
+scratch profile `r9probe` 保留备查；如需清理：`dsh plugin --profile r9probe remove …`
+后删除 `~/.dsh/profiles/r9probe`。

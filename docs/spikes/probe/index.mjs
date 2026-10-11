@@ -11,8 +11,11 @@
 import { appendFileSync, mkdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { defineTool } from '@deepseek-ai/dsh-tools';
 
 export const name = 'dsh-concourse-probe';
+
+export const inject = ['subagents', 'tools'];
 
 const LOG = join(tmpdir(), 'concourse-probe.jsonl');
 
@@ -47,16 +50,18 @@ export async function apply(ctx) {
   record('provider.registered', {});
 
   // ── 探针乙：路线 A 直发起点 ─────────────────────────────────────────────
-  ctx.tools.register({
+  try {
+  ctx.tools.register(defineTool({
     name: 'probe_start',
-    description: 'R-9 探针乙：以指定 model/reasoningEffort/toolFilter 直起一个 continuable 子代理，回读其 descriptor。',
+    description: 'R-9 探针乙：以指定 model/reasoningEffort/toolFilter 直起一个 continuable 子代理，回读其 childId。',
     parameters: {
-      type: 'object',
-      properties: {
-        model: { type: 'string' },
-        reasoningEffort: { type: 'string' },
-        denyTools: { type: 'array', items: { type: 'string' } },
-      },
+      model: { type: 'string' },
+      reasoningEffort: { type: 'string' },
+      denyTools: { type: 'array', items: { type: 'string' } },
+    },
+    output: {
+      schema: { type: 'object', properties: { childId: { type: 'string' } }, additionalProperties: false },
+      render: (_args, value) => [{ type: 'text', text: `childId: ${value?.childId ?? '(none)'}` }],
     },
     async execute(args, exec) {
       const parent = exec.agent;
@@ -77,6 +82,10 @@ export async function apply(ctx) {
       record('probe.startContinuable.ok', { childId, model: args.model, effort: args.reasoningEffort });
       return { childId };
     },
-  });
+  }));
   record('tool.registered', { tool: 'probe_start' });
+  } catch (error) {
+    record('tool.register.error', { message: String(error && error.message ? error.message : error) });
+    throw error;
+  }
 }
