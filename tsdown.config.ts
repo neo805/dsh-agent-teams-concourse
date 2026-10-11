@@ -4,7 +4,13 @@ import { defineConfig } from 'tsdown';
 // 所有 @deepseek-ai/* 与 react/zod 均为外部依赖（宿主运行时提供或随 dependencies 安装）。
 export default defineConfig([
   {
-    entry: { index: 'src/index.ts' },
+    // kernel 纯函数模块单独出产物：scripts/corpus-regression.mjs 直接消费 dist/kernel/profile/*.js。
+    entry: {
+      index: 'src/index.ts',
+      'kernel/profile/profiler': 'src/kernel/profile/profiler.ts',
+      'kernel/profile/suggest': 'src/kernel/profile/suggest.ts',
+      'kernel/glyphs': 'src/kernel/glyphs.ts',
+    },
     outDir: 'dist',
     format: ['esm'],
     platform: 'node',

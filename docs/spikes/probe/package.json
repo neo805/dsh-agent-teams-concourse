@@ -1,0 +1,13 @@
+{
+  "name": "dsh-concourse-probe",
+  "version": "0.0.0",
+  "private": true,
+  "description": "R-9 运行时探针（一次性，不发布）",
+  "type": "module",
+  "main": "index.mjs",
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  }
+}

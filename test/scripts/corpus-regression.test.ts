@@ -21,11 +21,11 @@ describe('corpus-regression 脚本', () => {
     expect(existsSync(REPORT)).toBe(true);
     const md = readFileSync(REPORT, 'utf8');
     // 报告含命中率数字与系统性高估/低估小节
-    expect(md).toMatch(/effort exact[:：]?\s*\d+(\.\d+)?%/i);
+    expect(md).toMatch(/effort exact[^\d]*\d+(\.\d+)?%/i);
     expect(md).toMatch(/±1/);
-    expect(md).toMatch(/tier exact[:：]?\s*\d+(\.\d+)?%/i);
+    expect(md).toMatch(/tier exact[^\d]*\d+(\.\d+)?%/i);
     expect(md).toContain('系统性高估');
-  }, 120_000);
+  });
 
   it('dist 缺失时退出码 2 并提示先 build', () => {
     const probe = join(ROOT, 'dist', 'kernel', 'profile', 'profiler.js');

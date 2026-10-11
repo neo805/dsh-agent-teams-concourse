@@ -1,0 +1,4 @@
+# R-9 探针 bundle patch（仅用于 scratch profile，不进生产 profile）
+- insert:
+    - id: concourse-probe
+      name: dsh-concourse-probe
