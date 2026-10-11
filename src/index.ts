@@ -78,7 +78,14 @@ export async function apply(ctx: unknown, config: ConcourseConfig = {}): Promise
 
   // 步骤 2：台账 + 事件存储
   try {
-    const probed = typeof c.storageDir === 'string' ? c.storageDir : undefined;
+    // storageDir 探测必须隔离 try：cordis 对未在 inject 声明的 context 属性
+    // 取值直接抛错（真机冒烟实证），绝不能让探测失败拖垮整个步骤。
+    let probed: string | undefined;
+    try {
+      probed = typeof c.storageDir === 'string' ? c.storageDir : undefined;
+    } catch {
+      probed = undefined;
+    }
     const path = config.storagePath ?? probed;
     store = path !== undefined ? createJsonlStore(path) : createMemoryStore();
     const s = store;

@@ -94,4 +94,19 @@ describe('cordis 入口', () => {
   test('NFR-2：ctx 整体为 null → 不 throw（全降级）', async () => {
     await apply(null, { enabled: true });
   });
+
+  test('回归（真机冒烟实证）：cordis 对未声明 inject 的属性取值抛错 → 装配仍完整', async () => {
+    // cordis context 对未在 inject 声明的属性（如 storageDir）取值直接 throw；
+    // 探测失败必须只降级内存存储，不得拖垮 ledger/service/tools 步骤。
+    const ctx = makeCtx();
+    const guarded = new Proxy(ctx as object, {
+      get(target, prop, receiver) {
+        if (prop === 'storageDir') throw new Error('cannot get property without inject');
+        return Reflect.get(target, prop, receiver);
+      },
+    });
+    await apply(guarded, { enabled: true });
+    expect(ctx.subagents.registerCalls).toHaveLength(1);
+    expect(ctx.tools.registered).toHaveLength(6);
+  });
 });

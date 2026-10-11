@@ -6,3 +6,5 @@ tmp/
 *.local
 .dsh-test-profile/
 .tmp-*
+
+.pnpm-store/
