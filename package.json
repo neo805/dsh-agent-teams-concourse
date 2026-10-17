@@ -16,8 +16,8 @@
       "default": "./dist/index.js"
     },
     "./client": {
-      "types": "./dist/client/index.d.ts",
-      "default": "./dist/client/index.js"
+      "types": "./dist/client/index.d.cts",
+      "default": "./dist/client/index.cjs"
     },
     "./cordis.patch.yml": "./cordis.patch.yml",
     "./package.json": "./package.json"

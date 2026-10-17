@@ -22,10 +22,25 @@ export default defineConfig([
   {
     entry: { 'client/index': 'src/client/index.ts' },
     outDir: 'dist',
-    format: ['esm'],
+    // 客户端产物必须是「普通 script + ModuleLoader CJS 包裹」：
+    // 宿主把 client bundle 当普通 <script> 加载，ESM 顶层 import 会抛
+    // SyntaxError: Cannot use import statement outside a module 并拖垮 web boot
+    // （2026-10-17 真机崩溃实证，crash-*-web-boot.log）。形态对齐官方
+    // dsh-effort-router/lib/client.js：factory(require) 提供 react / jsx-runtime。
+    format: ['cjs'],
     platform: 'browser',
     fixedExtension: false,
     dts: true,
     external: [/^@deepseek-ai\//, /^react(\/.*)?$/, /^react-dom(\/.*)?$/, 'zod'],
+    outputOptions: {
+      banner: [
+        'window.__ModuleLoader__.load({',
+        '\tid: "dsh-agent-teams-concourse",',
+        '\tfactory: (require) => {',
+        '\t\tvar module = { exports: {} };',
+        '\t\tvar exports = module.exports;',
+      ].join('\n'),
+      footer: ['\t\treturn module.exports;', '\t},', '});'].join('\n'),
+    },
   },
 ]);

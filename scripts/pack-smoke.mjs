@@ -10,6 +10,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { cwd, exit } from 'node:process';
+import { runInNewContext as vmRunInNewContext } from 'node:vm';
 
 const root = cwd();
 const tmp = mkdtempSync(join(tmpdir(), 'concourse-pack-'));
@@ -37,8 +38,30 @@ try {
   if (mod.name !== 'dsh-agent-teams-concourse') throw new Error(`入口 name 契约破坏：${mod.name}`);
   if (typeof mod.apply !== 'function') throw new Error('入口缺少 apply()');
 
-  const clientDist = join(pkgDir, 'dist/client/index.js');
-  const client = await import(pathToFileURL(clientDist).href);
+  // client 产物是「普通 script + ModuleLoader CJS 包裹」（宿主按 <script> 加载，
+  // 不是 ESM）：验证形态 + 用假 window/require 模拟宿主装载。
+  const clientSrc = readFileSync(join(pkgDir, 'dist/client/index.cjs'), 'utf8');
+  if (!clientSrc.startsWith('window.__ModuleLoader__.load({')) {
+    throw new Error('client 产物缺少 ModuleLoader 包裹（宿主按普通 script 加载，ESM 会拖垮 web boot）');
+  }
+  if (/^import\s/m.test(clientSrc)) throw new Error('client 产物存在顶层 ESM import');
+  let loaded;
+  const sandbox = {
+    window: {
+      __ModuleLoader__: {
+        load: (entry) => {
+          loaded = entry;
+        },
+      },
+    },
+  };
+  vmRunInNewContext(clientSrc, sandbox);
+  if (loaded?.id !== 'dsh-agent-teams-concourse') throw new Error(`ModuleLoader id 契约破坏：${loaded?.id}`);
+  const client = loaded.factory((id) => {
+    if (id === 'react') return { createElement: () => null };
+    if (id === 'react/jsx-runtime') return { jsx: () => null, jsxs: () => null };
+    throw new Error(`未预期的 require：${id}`);
+  });
   if (typeof client.apply !== 'function') throw new Error('client 入口缺少 apply()');
 
   const pkg = JSON.parse(readFileSync(join(pkgDir, 'package.json'), 'utf8'));
