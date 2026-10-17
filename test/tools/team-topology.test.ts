@@ -81,4 +81,50 @@ describe('team_topology', () => {
     expect(tool.output.schema).toMatchObject({ type: 'object', additionalProperties: false });
     expect(tool.description).toContain('team_task_*');
   });
+
+  test('F-1 回归：profile.signals 穿越 parseConcourse 边界不被 zod strip，confidence 随之抬升', async () => {
+    const fx = makeFixture({ withCatalog: true });
+    const tool = createTeamTopologyTool(fx.deps);
+    const withSignals = {
+      ...SAMPLE_SPEC,
+      tasks: SAMPLE_SPEC.tasks.map((t) =>
+        !('profile' in t)
+          ? t
+          : {
+              ...t,
+              profile: {
+                ...t.profile,
+                signals: ['s1', 's2', 's3', 's4'], // 4 条 → 置信 0.50 + 0.40 = 0.90
+              },
+            },
+      ),
+    };
+    const out = (await tool.execute({ spec: withSignals }, fakeExec())) as TopologyOut & {
+      suggestions: Array<{ confidence: number }>;
+    };
+    expect(out.suggestions).toHaveLength(1);
+    expect(out.suggestions[0]?.confidence).toBeCloseTo(0.9, 5);
+  });
+
+  test('F-2 回归：render 展示 rationale 全文与 toolFilter 禁用清单', async () => {
+    const fx = makeFixture({ withCatalog: true });
+    const tool = createTeamTopologyTool(fx.deps);
+    const securitySpec = {
+      ...SAMPLE_SPEC,
+      tasks: SAMPLE_SPEC.tasks.map((t) =>
+        !('profile' in t) ? t : { ...t, profile: { ...t.profile, risk: 'security' } },
+      ),
+    };
+    const out = (await tool.execute({ spec: securitySpec }, fakeExec())) as TopologyOut & {
+      suggestions: Array<{ rationale: string[]; toolFilter?: { deny?: string[] } }>;
+    };
+    const s = out.suggestions[0];
+    expect(s?.toolFilter?.deny).toEqual(['bash', 'write', 'edit']);
+    expect(s?.rationale.length).toBeGreaterThan(0);
+    const rendered = tool.output.render({ spec: securitySpec }, out as never);
+    const text = rendered.map((r) => ('text' in r ? r.text : '')).join('\n');
+    expect(text).toContain('工具过滤：禁用 bash/write/edit');
+    expect(text).toContain('risk=security');
+    expect(text).toContain('tier=premium');
+  });
 });

@@ -90,6 +90,10 @@ export const DifficultyProfile = z.object({
   determinism: z.enum(['low', 'mid', 'high']).default('mid'),
   risk: z.enum(['readonly', 'reversible', 'destructive', 'security']).default('reversible'),
   parallelism: z.enum(['serial', 'parallel']).default('serial'),
+  // profiler 附带的可解释性信号（FR-4 画像依据，非 7 维之一）。
+  // 必须显式声明：zod 默认 strip 未知键，不声明则 signals 在 parse 边界被剥离，
+  // suggest 的 confidence = 0.5 + 0.1×signals.length 会恒为 0.50（2026-10-17 真机实测实证）。
+  signals: z.array(z.string()).optional(),
 });
 export type DifficultyProfile = z.infer<typeof DifficultyProfile>;
 

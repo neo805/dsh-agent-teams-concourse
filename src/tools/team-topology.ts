@@ -21,6 +21,7 @@ interface SuggestionItem {
   maxDepth: number;
   confidence: number;
   rationale: string[];
+  toolFilter?: { allow?: string[]; deny?: string[] };
 }
 
 /** 逐任务派发建议：catalog 缺席/为空 → 空数组；单任务失败不拖垮整体预览。 */
@@ -45,6 +46,9 @@ async function buildSuggestions(deps: TeamToolsDeps, c: Concourse): Promise<Sugg
         maxDepth: s.maxDepth,
         confidence: s.confidence,
         rationale: s.rationale,
+        ...(s.toolFilter !== undefined
+          ? { toolFilter: { ...(s.toolFilter.allow !== undefined ? { allow: [...s.toolFilter.allow] } : {}), ...(s.toolFilter.deny !== undefined ? { deny: [...s.toolFilter.deny] } : {}) } }
+          : {}),
       });
     } catch {
       // 单任务建议失败（如 catalog 全排除）不拖垮整体预览
@@ -88,6 +92,14 @@ export function createTeamTopologyTool(deps: TeamToolsDeps) {
                 maxDepth: { type: 'integer', required: true },
                 confidence: { type: 'number', required: true },
                 rationale: { type: 'array', required: true, items: { type: 'string' } },
+                toolFilter: {
+                  type: 'object',
+                  additionalProperties: false,
+                  properties: {
+                    allow: { type: 'array', items: { type: 'string' } },
+                    deny: { type: 'array', items: { type: 'string' } },
+                  },
+                },
               },
             },
           },
@@ -112,6 +124,14 @@ export function createTeamTopologyTool(deps: TeamToolsDeps) {
           lines.push('派发建议：');
           for (const s of value.suggestions) {
             lines.push(`  ${s.taskId} → ${s.provider}/${s.model} effort=${s.reasoningEffort} tier=${s.tokenTier}（置信 ${s.confidence.toFixed(2)}）`);
+            if (s.toolFilter !== undefined) {
+              const parts: string[] = [];
+              if (s.toolFilter.allow !== undefined && s.toolFilter.allow.length > 0) parts.push(`仅允许 ${s.toolFilter.allow.join('/')}`);
+              if (s.toolFilter.deny !== undefined && s.toolFilter.deny.length > 0) parts.push(`禁用 ${s.toolFilter.deny.join('/')}`);
+              if (parts.length > 0) lines.push(`    工具过滤：${parts.join('；')}`);
+            }
+            // FR-4.4 fail-loud 可解释派发：选型依据全文展示（不截断）
+            for (const r of s.rationale) lines.push(`    · ${r}`);
           }
         }
         return [{ type: 'text' as const, text: lines.join('\n') }];

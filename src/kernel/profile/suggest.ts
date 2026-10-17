@@ -32,12 +32,14 @@ export interface ChoiceError {
   candidates: string[];
 }
 
-/** effort 有序档：索引距离用于最近邻降级。 */
-const EFFORT_ORDER = ['low', 'default', 'high'] as const;
+/** effort 有序档：索引距离用于最近邻降级。'off' 显式置于 'low' 之下——
+ *  未知档若按 default 位次参与计算，wanted=default 时 'off' 距离 0 会直接胜出，
+ *  把「中等认知任务」退化成「关掉推理」（2026-10-17 真机实测实证）。 */
+const EFFORT_ORDER = ['off', 'low', 'default', 'high'] as const;
 
 function effortIndex(e: string): number {
   const i = EFFORT_ORDER.indexOf(e as (typeof EFFORT_ORDER)[number]);
-  return i === -1 ? 1 : i; // 未知档按 default 位次参与距离计算（确定性）
+  return i === -1 ? EFFORT_ORDER.indexOf('default') : i; // 未知档按 default 位次参与距离计算（确定性）
 }
 
 /** cognitive → 目标 effort。 */

@@ -52,6 +52,22 @@ describe('suggest · effort 映射', () => {
     const s = suggest(baseProfile({ cognitive: 3 }), catalog); // 想要 default，等距
     expect(s.reasoningEffort).toBe('low');
   });
+
+  it('F-4 回归：off 显式位于 low 之下——想要 default 时 off 不得直接胜出', () => {
+    const catalog: ModelInfo[] = [
+      { provider: 'p', model: 'm', efforts: ['off', 'low', 'high'], contextWindow: 999999, tier: 'balanced' },
+    ];
+    const s = suggest(baseProfile({ cognitive: 3 }), catalog); // 想要 default：low/high 等距取低 → low，绝不选 off
+    expect(s.reasoningEffort).toBe('low');
+  });
+
+  it('F-4 回归：仅有 off 时才允许退化到 off', () => {
+    const catalog: ModelInfo[] = [
+      { provider: 'p', model: 'm', efforts: ['off'], contextWindow: 999999, tier: 'balanced' },
+    ];
+    const s = suggest(baseProfile({ cognitive: 3 }), catalog);
+    expect(s.reasoningEffort).toBe('off');
+  });
 });
 
 describe('suggest · tier 与 toolFilter', () => {
