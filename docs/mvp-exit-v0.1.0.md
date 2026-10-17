@@ -67,6 +67,24 @@
    宿主投影（ctx.sessionProjections）接线留 P5（src/client/BRIDGE.md）。
 4. **edge.budget 不回填**：kernel tokens 无边粒度估算函数（簇 B 偏差记录）。
 5. per-child 工具分流注册待宿主身份面（member 最小集已由 resolveScope 单测锁定）。
+6. **catalog 无 tier 数据源**（真机测试 F-3）：宿主 LlmCatalogLike 不提供模型价位档，
+   枚举只采集 {provider, model, efforts}，suggest 的 `m.tier ?? 'balanced'` 使
+   cheap/premium 目标档第一轮候选池必空、必走「回退到全部合格候选」——tier 目前
+   只是标签，无选型效应。待宿主目录面暴露 tier 或引入本地映射表（P5）。
+7. **assertKnownKeys 真机不可达**（真机测试 TC-11）：Web GUI 工具调用在到达
+   execute 前按参数 schema 归一化，入参根层未知字段被丢弃——did-you-mean 守卫
+   仅在离线/直调路径生效（单测 17/17 锁定）。笔误在真机上会降级成 zod「缺字段」
+   类报错。无代码修复面，属宿主行为记录。
+
+### 真机测试修复批次（2026-10-17，session-68cefdca 交叉核验后，commit aec9172）
+
+- **F-1**：DifficultyProfile schema 显式声明 `signals` 可选字段——zod strip 不再
+  吞掉 profiler 可解释性信号，`confidence = 0.5 + 0.1×n` 恢复生效（修复前恒 0.50）。
+- **F-2**：team_topology 输出补 `toolFilter`，render 展示 rationale 全文与工具
+  过滤禁用清单（FR-4.4 可解释派发对用户可见）。
+- **F-4**：`EFFORT_ORDER = ['off','low','default','high']`——`off` 显式置于 `low`
+  之下，wanted=default 时 `off` 不再因「未知档按 default 位次」距离 0 直接胜出
+  （修复前中等认知任务会退化成零推理）。
 
 ## 提交序列
 
