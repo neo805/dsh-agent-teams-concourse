@@ -8,6 +8,7 @@
  *
  * 装配链（provider → ledger/store → service → tools），四步互相独立：
  *   1. createCatalog / createSubstrate / createConcourseProvider → ctx.subagents.registerProvider
+ *      （0.2.1-rc.2：起点为 startActivation；工具面收口经 ctx.agents + ctx.tools.restrict）
  *   2. Ledger + 事件存储（config.storagePath → JSONL；宿主 storage 目录探测为
  *      防御式假设 ctx.storageDir，缺席降级内存存储）
  *   3. ConcourseService（snapshot 来自 store 事件回放）
@@ -17,7 +18,7 @@
  */
 import type { ToolDefinition } from '@deepseek-ai/dsh-tools';
 import { createCatalog, type LlmCatalogLike } from './host/catalog.js';
-import { createSubstrate, type SubagentsLike } from './host/substrate.js';
+import { createSubstrate, type AgentsLike, type SubagentsLike } from './host/substrate.js';
 import { createConcourseProvider } from './host/provider.js';
 import type { Catalog, Substrate } from './host/contracts.js';
 import { ConcourseService } from './service/concourse.js';
@@ -27,8 +28,8 @@ import { registerTeamTools, type TeamToolsDeps } from './tools/index.js';
 
 export const name = 'dsh-agent-teams-concourse';
 
-/** cordis 依赖注入声明：所需宿主服务。 */
-export const inject = ['subagents', 'llm', 'tools'];
+/** cordis 依赖注入声明：所需宿主服务。agents 用于逐顶点 toolFilter 收口。 */
+export const inject = ['subagents', 'agents', 'llm', 'tools'];
 
 export interface ConcourseConfig {
   /** 总开关。缺省 false：插件完全惰性。 */
@@ -40,6 +41,8 @@ export interface ConcourseConfig {
 /** 宿主上下文最小结构面（防御式：任何字段缺席都降级而非崩溃）。 */
 interface CtxLike {
   subagents?: (SubagentsLike & { registerProvider?(provider: unknown): unknown }) | undefined;
+  /** 宿主 live Agent 注册表：逐顶点 toolFilter 收口（0.2.1 起经 ctx.tools.restrict）。 */
+  agents?: AgentsLike | undefined;
   llm?: LlmCatalogLike | undefined;
   tools?: { register(definition: ToolDefinition): unknown } | undefined;
   logger?: { warn?(message: string): void } | undefined;
@@ -69,7 +72,10 @@ export async function apply(ctx: unknown, config: ConcourseConfig = {}): Promise
   // 步骤 1：catalog / substrate / provider 注册
   try {
     catalog = createCatalog(c.llm !== undefined ? { llm: c.llm } : {});
-    substrate = createSubstrate(c.subagents !== undefined ? { subagents: c.subagents } : {});
+    substrate = createSubstrate({
+      ...(c.subagents !== undefined ? { subagents: c.subagents } : {}),
+      ...(c.agents !== undefined ? { agents: c.agents } : {}),
+    });
     const provider = createConcourseProvider({});
     c.subagents?.registerProvider?.(provider);
   } catch (err) {

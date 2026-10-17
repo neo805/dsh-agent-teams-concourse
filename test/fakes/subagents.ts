@@ -1,35 +1,33 @@
 /**
  * test/fakes/subagents — FakeSubagents：宿主 ctx.subagents 的可编程伪实现。
  *
- * 用途：host 层 L2 契约测试。记录 registerProvider / startContinuable /
- * sendMessage / interrupt 全部调用；可编程子代理行为（成功按序分配确定性
- * childId，或抛出指定的 startError / sendError / interruptError）。
- *
- * 形态镜像宿主 dsh-subagent 公共门面（结构性子集，非官方类型）：
+ * 镜像 DSH 0.2.1-rc.2 的 dsh-subagent 公共门面（结构性子集，非官方类型）：
  *   registerProvider(provider) → dispose
- *   startContinuable(spec)     → { childId }
+ *   startActivation(spec)      → SubagentActivation{ childId, dispose }
  *   sendMessage(sender, targetId, content, options) → messageId（fake 固定 'msg-N'）
  *   interrupt(targetId, authority) → void（同步，与宿主一致）
+ * 另配 FakeAgents：ctx.agents.get(id) → 带 scoped tools.restrict 的伪 Agent，
+ * 用于逐顶点工具面收口断言（0.2.1 起 toolFilter 经 restrict 应用）。
  */
 
-/** startContinuable 的最小请求形态（仅 fake 记录用）。 */
-export interface FakeContinuableRequest {
+/** startActivation 的最小请求形态（仅 fake 记录用）。 */
+export interface FakeActivationRequest {
   prompt: readonly unknown[];
   parent: unknown;
   agentOptions?: { model?: string; reasoningEffort?: string };
-  toolFilter?: { allow?: readonly string[]; deny?: readonly string[] };
   maxDepth?: number;
 }
 
-export interface FakeContinuableSpec {
+export interface FakeActivationSpec {
   provider: string;
   label: string;
-  request: FakeContinuableRequest;
+  request: FakeActivationRequest;
   signal: AbortSignal;
+  delivery: 'parent' | 'caller';
 }
 
 export interface FakeStartCall {
-  spec: FakeContinuableSpec;
+  spec: FakeActivationSpec;
 }
 
 export interface FakeSendCall {
@@ -44,22 +42,64 @@ export interface FakeInterruptCall {
   authority: unknown;
 }
 
+export interface FakeDisposeCall {
+  childId: string;
+}
+
+/** 伪激活句柄：dispose 记录调用顺序。 */
+export class FakeActivation {
+  constructor(
+    readonly childId: string,
+    private readonly log: FakeDisposeCall[],
+    private readonly fail?: Error,
+  ) {}
+  async dispose(): Promise<void> {
+    this.log.push({ childId: this.childId });
+    if (this.fail !== undefined) throw this.fail;
+  }
+}
+
+/** 伪 Agent：只有 scoped tools.restrict 面（记录收到的 restriction）。 */
+export class FakeAgent {
+  readonly restrictCalls: unknown[] = [];
+  readonly ctx = {
+    tools: {
+      restrict: (filter: unknown): (() => void) => {
+        this.restrictCalls.push(filter);
+        return () => undefined;
+      },
+    },
+  };
+}
+
+/** 伪 ctx.agents：按 childId 分配 FakeAgent（未知 id 返回 undefined）。 */
+export class FakeAgents {
+  readonly agents = new Map<string, FakeAgent>();
+  get(id: string): FakeAgent | undefined {
+    return this.agents.get(id);
+  }
+}
+
 export class FakeSubagents {
   /** registerProvider 收到的 provider 对象（按调用序）。 */
   readonly registerCalls: unknown[] = [];
-  /** startContinuable 收到的 spec（按调用序）。 */
+  /** startActivation 收到的 spec（按调用序）。 */
   readonly startCalls: FakeStartCall[] = [];
   /** sendMessage 收到的调用（按调用序）。 */
   readonly sendCalls: FakeSendCall[] = [];
   /** interrupt 收到的调用（按调用序）。 */
   readonly interruptCalls: FakeInterruptCall[] = [];
+  /** activation.dispose 调用（按调用序）。 */
+  readonly disposeCalls: FakeDisposeCall[] = [];
 
-  /** 设置后 startContinuable 抛出该错误（保持同一引用，便于 toBe 断言）。 */
+  /** 设置后 startActivation 抛出该错误（保持同一引用，便于 toBe 断言）。 */
   startError?: Error;
   /** 设置后 sendMessage 抛出该错误。 */
   sendError?: Error;
   /** 设置后 interrupt 抛出该错误（同步，与宿主一致）。 */
   interruptError?: Error;
+  /** 设置后 activation.dispose 抛出该错误。 */
+  disposeError?: Error;
 
   private childSeq = 0;
   private msgSeq = 0;
@@ -76,11 +116,11 @@ export class FakeSubagents {
     };
   }
 
-  async startContinuable(spec: FakeContinuableSpec): Promise<{ childId: string }> {
+  async startActivation(spec: FakeActivationSpec): Promise<FakeActivation> {
     this.startCalls.push({ spec });
     if (this.startError !== undefined) throw this.startError;
     this.childSeq += 1;
-    return { childId: `child-${this.childSeq}` };
+    return new FakeActivation(`child-${this.childSeq}`, this.disposeCalls, this.disposeError);
   }
 
   async sendMessage(

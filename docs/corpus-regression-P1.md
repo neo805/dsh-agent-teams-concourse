@@ -1,7 +1,7 @@
 # 语料回归报告（P1）
 
 - 语料：`C:\Users\KEI.NEO\Documents\Projects\2026.10_dsh-agent-teams-concourse\test\fixtures\corpus\public.jsonl`（54 条）
-- 时间：2026-10-17T08:18:41.767Z
+- 时间：2026-10-17T17:42:40.597Z
 - 判定下限：effort exact ≥ 50% · effort ±1 ≥ 85% · tier exact ≥ 70%
 
 ## 命中率

@@ -1,18 +1,26 @@
 /**
  * host/substrate — 官方基座薄适配（R-1 收口点）：Substrate 契约实现。
  *
- * 路线 A：startVertex 把 VertexStart 装配成 ctx.subagents.startContinuable
- * 调用，provider 固定为 CONCOURSE_PROVIDER_NAME，model/reasoningEffort 进
- * agentOptions，toolFilter/maxDepth 原样透传（缺席则不出现该键，
- * 遵守 exactOptionalPropertyTypes）。
+ * 路线 A：startVertex 把 VertexStart 装配成 ctx.subagents.startActivation
+ * 调用（DSH 0.2.1-rc.2 起替代 0.2.0 的 startContinuable），provider 固定为
+ * CONCOURSE_PROVIDER_NAME，model/reasoningEffort 进 agentOptions，maxDepth 原样
+ * 透传（缺席则不出现该键，遵守 exactOptionalPropertyTypes）。
  *
- * 宿主 API 假设（经运行时源码核验，见本文件尾部注记）：
+ * 0.2.1-rc.2 API 差异（经 dsh-subagent 0.2.1-rc.2 类型与实现核验）：
+ *   · startActivation(spec) → SubagentActivation{ childId, result, dispose }
+ *     取代 startContinuable(spec) → { childId }；activation 是本层持有的
+ *     生命周期句柄（interrupt 时经 dispose 停止并释放）。
+ *   · interrupt(childId, authority)：authority 从裸 Agent 改为结构化
+ *     `{ kind:'ancestor', agent }`（另一形态 `{ kind:'user', parentSessionId }`）。
+ *   · toolFilter 不再是 start 期公开参数（只剩冷恢复 descriptor 重放）；
+ *     本层用「拉起后立即对子 Agent 作用域调 ctx.tools.restrict(restriction)」
+ *     还原逐顶点工具面收口，失败即 fail-loud（V-2 不静默降级）。
+ *   · delivery='parent'：子代理终态结果投递给父模型（与官方 subagent 工具一致）。
+ *
+ * 宿主 API 假设：
  *   · sendText  → subagents.sendMessage(sender, targetId, content, { signal })
  *     sender 是 startVertex 时记录的 exact live parent Agent（宿主校验
  *     `ctx.agents.get(sender.id) === sender`），content 为 [{ type:'text', text }]。
- *   · interrupt → subagents.interrupt(childId, authority)（同步方法，
- *     authority 用同一 parent Agent）。
- * substrate 在 startVertex 成功时按 vertexId 记录 parent，供 send/interrupt 复用。
  *
  * degraded 模式（deps.subagents 缺席）：构造不崩溃，三方法全部 throw
  * SubstrateError(code='DEGRADED')（NFR 降级不崩溃）。
@@ -38,34 +46,49 @@ export class SubstrateError extends Error {
   }
 }
 
-/** startContinuable 的装配结果形态（镜像宿主 spec 子集）。 */
-export interface ContinuableStartSpecLike {
+/** startActivation 返回的激活句柄形态（镜像宿主 SubagentActivation 子集）。 */
+export interface ActivationLike {
+  childId: string;
+  /** 停止并释放该激活（含其拥有的后代）。 */
+  dispose(): Promise<void>;
+}
+
+/** startActivation 的装配形态（镜像宿主 SubagentActivationSpec 子集）。 */
+export interface ActivationStartSpecLike {
   provider: string;
   label: string;
   request: {
     prompt: readonly { type: 'text'; text: string }[];
     parent: unknown;
     agentOptions?: { model?: string; reasoningEffort?: string };
-    toolFilter?: { allow?: readonly string[]; deny?: readonly string[] };
     maxDepth?: number;
   };
   signal: AbortSignal;
+  /** parent：终态结果投递给父模型（与官方 subagent 工具一致）。 */
+  delivery: 'parent' | 'caller';
+}
+
+/** 宿主 ctx.agents 的结构性子集：按 id 取 live Agent（用于逐顶点工具面收口）。 */
+export interface AgentsLike {
+  get(id: string): unknown;
 }
 
 /** 宿主 ctx.subagents 的结构性子集（本层唯一允许触碰的宿主面）。 */
 export interface SubagentsLike {
-  startContinuable(spec: ContinuableStartSpecLike): Promise<{ childId: string }>;
+  startActivation(spec: ActivationStartSpecLike): Promise<ActivationLike>;
   sendMessage(
     sender: unknown,
     targetId: string,
     content: readonly { type: 'text'; text: string }[],
     options: { signal: AbortSignal },
   ): Promise<unknown>;
+  /** 0.2.1：authority 为结构化对象 `{ kind:'ancestor', agent }`。 */
   interrupt(targetId: string, authority: unknown): void;
 }
 
 export interface SubstrateDeps {
   subagents?: SubagentsLike;
+  agents?: AgentsLike;
 }
 
 /** 永不 abort 的信号：基座自身不产生取消语义（取消由 interrupt 承担）。 */
@@ -78,8 +101,11 @@ function hostMessage(e: unknown): string {
 
 export function createSubstrate(deps: SubstrateDeps): Substrate {
   const subagents = deps.subagents;
+  const agents = deps.agents;
   /** vertexId → startVertex 时记录的 parent（send/interrupt 的宿主授权需要 exact live Agent）。 */
   const parents = new Map<string, unknown>();
+  /** vertexId → activation 句柄（interrupt 时停止并释放）。 */
+  const activations = new Map<string, ActivationLike>();
 
   if (subagents === undefined) {
     const degraded = <T>(vertexId: string, op: string): Promise<T> =>
@@ -101,6 +127,28 @@ export function createSubstrate(deps: SubstrateDeps): Substrate {
   // 早期 return 后缩窄为在场（hoisted function 不保留闭包缩窄，显式落常量）
   const host: SubagentsLike = subagents;
 
+  /**
+   * 逐顶点工具面收口（V-2）：0.2.1 起 start 期不接受 toolFilter，改为对已发布
+   * 子 Agent 的 scoped ctx 调 tools.restrict。无法应用时 fail-loud（不静默降级）。
+   */
+  function applyToolFilter(childId: string, spec: VertexStart): void {
+    if (spec.toolFilter === undefined) return;
+    const agent = agents?.get(childId) as
+      | { ctx?: { tools?: { restrict?: (f: unknown) => unknown } } }
+      | undefined;
+    const restrict = agent?.ctx?.tools?.restrict;
+    if (typeof restrict !== 'function' || agent?.ctx?.tools === undefined) {
+      throw new Error(
+        '宿主 ctx.agents 注册表不可达或子 Agent 缺少 tools.restrict，toolFilter 无法应用（fail-loud）',
+      );
+    }
+    const filter = {
+      ...(spec.toolFilter.allow !== undefined ? { allow: [...spec.toolFilter.allow] } : {}),
+      ...(spec.toolFilter.deny !== undefined ? { deny: [...spec.toolFilter.deny] } : {}),
+    };
+    restrict.call(agent.ctx.tools, filter);
+  }
+
   async function startVertex(spec: VertexStart, parent: unknown): Promise<VertexHandle> {
     // 逐字段条件装配：可选项缺席时对应键不出现
     let agentOptions: { model?: string; reasoningEffort?: string } | undefined;
@@ -110,21 +158,21 @@ export function createSubstrate(deps: SubstrateDeps): Substrate {
         ...(spec.reasoningEffort !== undefined ? { reasoningEffort: spec.reasoningEffort } : {}),
       };
     }
-    const call: ContinuableStartSpecLike = {
+    const call: ActivationStartSpecLike = {
       provider: CONCOURSE_PROVIDER_NAME,
       label: spec.label,
       request: {
         prompt: [{ type: 'text', text: spec.prompt }],
         parent,
         ...(agentOptions !== undefined ? { agentOptions } : {}),
-        ...(spec.toolFilter !== undefined ? { toolFilter: spec.toolFilter } : {}),
         ...(spec.maxDepth !== undefined ? { maxDepth: spec.maxDepth } : {}),
       },
       signal: NEVER_SIGNAL,
+      delivery: 'parent',
     };
-    let childId: string;
+    let activation: ActivationLike;
     try {
-      ({ childId } = await host.startContinuable(call));
+      activation = await host.startActivation(call);
     } catch (e) {
       throw new SubstrateError(
         'START_FAILED',
@@ -133,8 +181,21 @@ export function createSubstrate(deps: SubstrateDeps): Substrate {
         e,
       );
     }
+    // 工具面收口失败：释放刚拉起的激活后 fail-loud（不留下无约束顶点）
+    try {
+      applyToolFilter(activation.childId, spec);
+    } catch (e) {
+      await Promise.resolve(activation.dispose()).catch(() => undefined);
+      throw new SubstrateError(
+        'START_FAILED',
+        spec.vertexId,
+        `顶点 "${spec.vertexId}" 工具面收口失败：${hostMessage(e)}`,
+        e,
+      );
+    }
     parents.set(spec.vertexId, parent);
-    return { vertexId: spec.vertexId, childId };
+    activations.set(spec.vertexId, activation);
+    return { vertexId: spec.vertexId, childId: activation.childId };
   }
 
   /** 取回 startVertex 时记录的 parent；未知顶点 fail-loud。 */
@@ -169,23 +230,40 @@ export function createSubstrate(deps: SubstrateDeps): Substrate {
     }
   }
 
-  function interrupt(handle: VertexHandle): Promise<void> {
+  async function interrupt(handle: VertexHandle): Promise<void> {
     let parent: unknown;
     try {
       parent = requireParent('INTERRUPT_FAILED', handle, 'interrupt');
-      host.interrupt(handle.childId, parent); // 宿主该方法为同步
     } catch (e) {
-      if (e instanceof SubstrateError) return Promise.reject(e);
-      return Promise.reject(
-        new SubstrateError(
-          'INTERRUPT_FAILED',
-          handle.vertexId,
-          `中断顶点 "${handle.vertexId}" 失败：${hostMessage(e)}`,
-          e,
-        ),
+      return Promise.reject(e);
+    }
+    try {
+      // 0.2.1：authority 结构化（ancestor = exact live parent Agent）
+      host.interrupt(handle.childId, { kind: 'ancestor', agent: parent });
+    } catch (e) {
+      throw new SubstrateError(
+        'INTERRUPT_FAILED',
+        handle.vertexId,
+        `中断顶点 "${handle.vertexId}" 失败：${hostMessage(e)}`,
+        e,
       );
     }
-    return Promise.resolve();
+    // 停止信号已发出；再经 activation.dispose 等待静默并释放资源（尽力而为）。
+    // parents 保留：重复 interrupt 时宿主对缺席目标视为已接受 no-op（幂等）。
+    const activation = activations.get(handle.vertexId);
+    if (activation !== undefined) {
+      activations.delete(handle.vertexId);
+      try {
+        await activation.dispose();
+      } catch (e) {
+        throw new SubstrateError(
+          'INTERRUPT_FAILED',
+          handle.vertexId,
+          `顶点 "${handle.vertexId}" 释放失败：${hostMessage(e)}`,
+          e,
+        );
+      }
+    }
   }
 
   return { mode: 'full', startVertex, sendText, interrupt };

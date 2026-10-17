@@ -2,9 +2,11 @@
  * host/provider — concourse 自有 subagent provider（路线 A）。
  *
  * 决议 D-P3：组织层不走 one-shot `ctx.subagents.start()`，逐顶点只经
- * `startContinuable` 拉起。本 provider 因此：
- *   · capabilities 声明 agentOptions/toolFilter/persona/depthLimit
- *     （continuable 路径由 continuation manager 读取 composition，声明保真）；
+ * `startActivation`（0.2.1-rc.2 起；0.2.0 为 startContinuable）拉起。
+ * 本 provider 因此：
+ *   · capabilities 按 0.2.1-rc.2 契约声明 { agentOptions, agentPreset,
+ *     outputSchema, depthLimit }（旧的 toolFilter/persona 位已从公开契约移除，
+ *     工具面收口改由 substrate 在挂载后调 ctx.tools.restrict 完成）；
  *   · start（one-shot）直接抛 ProviderError(code='CONTINUABLE_ONLY')；
  *   · prepareContinuable 只贡献 spawn seed —— MVP 仅 spawn 语义（全新子代理，
  *     无父历史 seed）；fork（带父 seed）推迟到 P5。
@@ -41,16 +43,18 @@ export interface ContinuableCreateSpecLike {
   seed?: readonly unknown[];
 }
 
+/** 0.2.1-rc.2 的 SubagentCapabilities 字段集（启动期能力声明）。 */
+export interface ConcourseProviderCapabilities {
+  readonly agentOptions: boolean;
+  readonly agentPreset: boolean;
+  readonly outputSchema: boolean;
+  readonly depthLimit: boolean;
+}
+
 /** concourse provider 对象形态（镜像 dsh-subagent SubagentProvider 子集）。 */
 export interface ConcourseProvider {
   readonly name: string;
-  readonly capabilities: {
-    readonly agentOptions: boolean;
-    readonly outputSchema: boolean;
-    readonly depthLimit: boolean;
-    readonly toolFilter: boolean;
-    readonly persona: boolean;
-  };
+  readonly capabilities: ConcourseProviderCapabilities;
   readonly inheritsParentContext: boolean;
   start(request: unknown): Promise<never>;
   prepareContinuable(request: ContinuableCreateRequestLike): Promise<ContinuableCreateSpecLike>;
@@ -65,10 +69,9 @@ export function createConcourseProvider(_deps: ConcourseProviderDeps): Concourse
     name: CONCOURSE_PROVIDER_NAME,
     capabilities: {
       agentOptions: true,
+      agentPreset: false,
       outputSchema: false,
       depthLimit: true,
-      toolFilter: true,
-      persona: true,
     },
     // spawn 语义：子代理不继承父已完成轮次前缀
     inheritsParentContext: false,
@@ -76,7 +79,7 @@ export function createConcourseProvider(_deps: ConcourseProviderDeps): Concourse
       return Promise.reject(
         new ProviderError(
           'CONTINUABLE_ONLY',
-          'concourse 路线 A 只支持 continuable 子代理（startContinuable）；one-shot start 不可用。',
+          'concourse 路线 A 只支持 continuable 子代理（startActivation）；one-shot start 不可用。',
         ),
       );
     },

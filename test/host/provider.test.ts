@@ -9,14 +9,13 @@ describe('host/provider（concourse 自有 provider，路线 A 仅 continuable�
     expect(p.name).toBe('concourse');
   });
 
-  it('capabilities 声明 agentOptions/toolFilter/persona/depthLimit；outputSchema 不声明', () => {
+  it('capabilities 按 0.2.1-rc.2 契约声明 agentOptions/agentPreset/outputSchema/depthLimit', () => {
     const p = createConcourseProvider({});
     expect(p.capabilities).toEqual({
       agentOptions: true,
+      agentPreset: false,
       outputSchema: false,
       depthLimit: true,
-      toolFilter: true,
-      persona: true,
     });
   });
 

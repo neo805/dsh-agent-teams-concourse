@@ -75,6 +75,14 @@
    execute 前按参数 schema 归一化，入参根层未知字段被丢弃——did-you-mean 守卫
    仅在离线/直调路径生效（单测 17/17 锁定）。笔误在真机上会降级成 zod「缺字段」
    类报错。无代码修复面，属宿主行为记录。
+8. **toolFilter 改为挂载后收口**（DSH 0.2.1-rc.2 适配，见
+   `docs/decisions/D-P3-runtime-0.2.1.md`）：0.2.1 起子代理 start 期不再接受
+   toolFilter，本插件在 startActivation 成功后经子 Agent 的
+   `ctx.tools.restrict()` 应用同一 restriction；失败即 dispose + fail-loud。
+   与 0.2.0 的声明式透传相比存在毫秒级生效窗口。
+9. **inject 新增 `agents`**（0.2.1 适配）：cordis 对未在 inject 声明的属性取值会
+   直接抛错；逐顶点工具面收口需要 `ctx.agents`，故声明。宿主缺失该服务时插件
+   按 cordis 语义不激活（fail-loud，不静默降级）。
 
 ### 真机测试修复批次（2026-10-17，session-68cefdca 交叉核验后，commit aec9172）
 

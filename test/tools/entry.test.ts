@@ -39,9 +39,9 @@ function makeCtx(): FakeCtx {
 }
 
 describe('cordis 入口', () => {
-  test('导出契约：name + inject 声明所需服务', () => {
+  test('导出契约：name + inject 声明所需服务（含 0.2.1 起的 agents）', () => {
     expect(name).toBe('dsh-agent-teams-concourse');
-    expect([...inject]).toEqual(expect.arrayContaining(['subagents', 'llm', 'tools']));
+    expect([...inject]).toEqual(expect.arrayContaining(['subagents', 'agents', 'llm', 'tools']));
   });
 
   test('NFR-1：enabled 缺省 → 零副作用', async () => {
