@@ -54,6 +54,9 @@
   - T1a 链路 topology → plan → approve 成功：`w1` 经 `startActivation` 拉起，
     childId `c96e5d1f-…`，台账 5 行（submit/vertex-self/vertex-start/approve），
     self 根跳过；子代理按任务回执 `OK`。
+  - `team_send`（smoke2）：lead→w1 投递经 inbox-gate 记录
+    `comm/deliver`（tokens=3）与 `budget/consume` 台账，子代理冷恢复并回复 `PONG`
+    ——`sendMessage(parent, childId, content, {signal})` 在新运行时下成立。
 - 结论：宿主 API 适配成立；`toolFilter` restrict 路径在真机链路中未报错（fail-loud 未触发）。
 
 ## 遗留
