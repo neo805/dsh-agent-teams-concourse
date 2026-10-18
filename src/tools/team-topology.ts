@@ -6,6 +6,11 @@ import { defineTool } from '@deepseek-ai/dsh-tools';
 import { ZodError } from 'zod';
 import { DifficultyProfile, parseConcourse, type Concourse } from '../kernel/topology/schema.js';
 import { validateConcourse } from '../kernel/topology/validate.js';
+import {
+  findUnknownKeyIssues,
+  zodErrorToIssues,
+  type SchemaIssue,
+} from '../kernel/topology/issues.js';
 import { classify, TIER_LABELS } from '../kernel/topology/tier.js';
 import { estimateConcourseBudget } from '../kernel/budget/tokens.js';
 import { suggest } from '../kernel/profile/suggest.js';
@@ -107,7 +112,11 @@ export function createTeamTopologyTool(deps: TeamToolsDeps) {
       },
       render: (_args, value) => {
         if (value.stage === 'parse') {
-          const lines = value.issues.map((i) => `  ✗ ${i.path ?? ''} ${i.message}`.trim());
+          const lines = value.issues.map((i) => {
+            // F3：path 缺省时不产生双空格（旧版 `${path ?? ''} ${message}`）
+            const parts = i.path !== undefined && i.path.length > 0 ? [i.path, i.message] : [i.message];
+            return `  ✗ ${parts.join(' ')}`;
+          });
           return [{ type: 'text' as const, text: ['拓扑预览失败（结构解析）：', ...lines].join('\n') }];
         }
         const lines = [
@@ -116,7 +125,10 @@ export function createTeamTopologyTool(deps: TeamToolsDeps) {
         ];
         if (value.issues.length > 0) {
           lines.push('校验问题：');
-          for (const i of value.issues) lines.push(`  ✗ [${i.code}] ${i.message}`);
+          for (const i of value.issues) {
+            const p = i.path !== undefined && i.path.length > 0 ? `${i.path}：` : '';
+            lines.push(`  ✗ [${i.code}] ${p}${i.message}`);
+          }
         } else {
           lines.push('校验：通过');
         }
@@ -139,21 +151,23 @@ export function createTeamTopologyTool(deps: TeamToolsDeps) {
     },
     execute: async (args) => {
       assertKnownKeys(args, ['spec'], 'team_topology');
+      // F2：spec 内部未知键（zod 会 strip）在 parse 前单独扫描，与语义 issue 合并
+      const unknownKeyIssues: SchemaIssue[] = findUnknownKeyIssues(args.spec);
       let c: Concourse;
       try {
         c = parseConcourse(args.spec);
       } catch (err) {
         if (err instanceof ZodError) {
-          const issues = err.issues.map((i) => ({
-            code: 'SCHEMA',
-            message: i.message,
-            path: i.path.join('.'),
-          }));
-          return { ok: false, stage: 'parse' as const, issues, suggestions: [] };
+          return {
+            ok: false,
+            stage: 'parse' as const,
+            issues: [...unknownKeyIssues, ...zodErrorToIssues(err)],
+            suggestions: [],
+          };
         }
         throw err;
       }
-      const issues = validateConcourse(c);
+      const issues = [...unknownKeyIssues, ...validateConcourse(c)];
       const est = estimateConcourseBudget(c);
       const suggestions = await buildSuggestions(deps, c);
       const tier = classify(c.vertices, c.edges);

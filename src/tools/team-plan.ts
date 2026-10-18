@@ -91,7 +91,11 @@ export function createTeamPlanTool(deps: TeamToolsDeps) {
       render: (_args, value) => {
         if (!value.ok) {
           const lines = [`计划创建失败（${value.code ?? '?'}）：${value.message ?? ''}`];
-          for (const i of value.issues) lines.push(`  ✗ [${i.code}] ${i.message}`);
+          for (const i of value.issues) {
+            // F4：结构错误也带 path（与 team_topology 一致）
+            const p = i.path !== undefined && i.path.length > 0 ? `${i.path}：` : '';
+            lines.push(`  ✗ [${i.code}] ${p}${i.message}`);
+          }
           return [{ type: 'text' as const, text: lines.join('\n') }];
         }
         const lines = [value.plan ?? '', '', '风险：'];

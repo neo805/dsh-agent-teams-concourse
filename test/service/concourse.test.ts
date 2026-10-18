@@ -7,6 +7,7 @@
 import { describe, expect, it } from 'vitest';
 import { ConcourseError, ConcourseService } from '../../src/service/concourse.js';
 import { Ledger } from '../../src/service/ledger.js';
+import { BudgetBook } from '../../src/kernel/comms/budget.js';
 import { estimateConcourseBudget } from '../../src/kernel/budget/tokens.js';
 import { parseConcourse, type ConcourseInput } from '../../src/kernel/topology/schema.js';
 import { StubSubstrate, fakeClock } from './helpers.js';
@@ -73,6 +74,74 @@ describe('ConcourseService.create', () => {
     const r2 = service.create({ ...t1bInput(), id: undefined } as Record<string, unknown>);
     expect(r1.concourse.id).toBe('concourse-1');
     expect(r2.concourse.id).toBe('concourse-2');
+  });
+
+  it('F5 回归：snapshot 回放后计数器播种，新 id 不撞已恢复的 concourse-N', () => {
+    const substrate = new StubSubstrate();
+    const ledger = new Ledger({ now: fakeClock() });
+    const restored = parseConcourse({ ...t1bInput(), id: 'concourse-3' });
+    const snapshot = {
+      concourses: [
+        {
+          concourse: restored,
+          status: 'pending-approval' as const,
+          handles: [],
+          budget: new BudgetBook({}),
+        },
+      ],
+    };
+    const service = new ConcourseService({ substrate, ledger, now: fakeClock(), snapshot });
+    const input = t1bInput() as Record<string, unknown>;
+    delete input['id'];
+    const rec = service.create(input);
+    // 播种到 3 → 下一个是 4，而不是与回放条目撞号的 1
+    expect(rec.concourse.id).toBe('concourse-4');
+  });
+
+  it('F5 回归：自动 id 撞号即跳过（手工命名的 concourse-N 不阻塞自动生成）', () => {
+    const { service } = makeService();
+    // 手工占用 concourse-1 / concourse-2
+    service.create({ ...t1bInput(), id: 'concourse-1' } as Record<string, unknown>);
+    service.create({ ...t1bInput(), id: 'concourse-2' } as Record<string, unknown>);
+    const input = t1bInput() as Record<string, unknown>;
+    delete input['id'];
+    const rec = service.create(input);
+    expect(rec.concourse.id).toBe('concourse-3');
+  });
+
+  it('F4 回归：结构非法 → issues 为规范化 SCHEMA 列表（含 path），message 不再内嵌整段 JSON', () => {
+    const { service } = makeService();
+    try {
+      service.create({ id: 'x', tier: 'T9', vertices: [] });
+      expect.unreachable('应当抛错');
+    } catch (err) {
+      expect(err).toBeInstanceOf(ConcourseError);
+      const ce = err as ConcourseError;
+      expect(ce.code).toBe('INVALID_SPEC');
+      expect(ce.issues?.length).toBeGreaterThan(0);
+      expect(ce.issues?.every((i) => i.code === 'SCHEMA')).toBe(true);
+      expect(ce.issues?.some((i) => i.path !== undefined && i.path.length > 0)).toBe(true);
+      // message 是单行中文摘要，不含 zod 的 JSON 数组
+      expect(ce.message).not.toContain('[\n');
+      expect(ce.message.length).toBeLessThan(300);
+    }
+  });
+
+  it('F2 回归：spec 内部未知字段 → UNKNOWN_FIELD issue（附 did-you-mean）', () => {
+    const { service } = makeService();
+    const bad = { ...t1bInput(), vertces: [] } as Record<string, unknown>;
+    delete bad['vertices'];
+    try {
+      service.create(bad);
+      expect.unreachable('应当抛错');
+    } catch (err) {
+      const ce = err as ConcourseError;
+      expect(ce.code).toBe('INVALID_SPEC');
+      const hit = ce.issues?.find((i) => i.code === 'UNKNOWN_FIELD');
+      expect(hit).toBeDefined();
+      expect(hit?.path).toBe('vertces');
+      expect(hit?.message).toContain('vertices');
+    }
   });
 
   it('语义校验有 issue → throw ConcourseError(INVALID_SPEC) 附 issue 列表', () => {

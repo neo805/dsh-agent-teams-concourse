@@ -14,6 +14,12 @@
 import { ZodError } from 'zod';
 import { parseConcourse, type Concourse, type Vertex } from '../kernel/topology/schema.js';
 import { validateConcourse, type ValidationIssue } from '../kernel/topology/validate.js';
+import {
+  findUnknownKeyIssues,
+  zodErrorSummary,
+  zodErrorToIssues,
+  type SchemaIssue,
+} from '../kernel/topology/issues.js';
 import { estimateConcourseBudget } from '../kernel/budget/tokens.js';
 import type { Substrate, VertexHandle, VertexStart } from '../host/contracts.js';
 import type { Ledger } from './ledger.js';
@@ -32,7 +38,7 @@ export class ConcourseError extends Error {
   constructor(
     readonly code: ConcourseErrorCode,
     message: string,
-    readonly issues?: readonly ValidationIssue[],
+    readonly issues?: readonly SchemaIssue[],
     readonly causeCode?: string,
   ) {
     super(message);
@@ -105,6 +111,14 @@ export class ConcourseService {
       });
       this.order.push(rc.concourse.id);
     }
+    // F5（2026-10-18 真机测试）：计数器在进程内从 0 起，回放不播种 → 重启后首个
+    // 缺 id 的 create 必生成已被占用的 concourse-1。这里以回放条目中形如
+    // `concourse-<n>` 的最大序号播种计数器；其余命名（如用户手工 id）由 ensureId
+    // 的撞号跳过兜底，不依赖命名规整。
+    for (const rc of deps.snapshot?.concourses ?? []) {
+      const m = /^concourse-(\d+)$/.exec(rc.concourse.id);
+      if (m !== null) counter = Math.max(counter, Number(m[1]));
+    }
   }
 
   /**
@@ -115,16 +129,25 @@ export class ConcourseService {
   create(spec: unknown): ConcourseRecord {
     // spec 缺 id 时由注入 idGen 生成（zod 要求 id 非空，先补后解析）
     const withId = this.ensureId(spec);
+    // F2（2026-10-18 真机测试）：zod 默认 strip 未知键，spec 内笔误会静默丢字段；
+    // parse 前逐层扫描未知键，命中即并入 issues fail-loud（附 did-you-mean）。
+    const unknownKeyIssues = findUnknownKeyIssues(withId);
     let concourse: Concourse;
     try {
       concourse = parseConcourse(withId);
     } catch (err) {
       if (err instanceof ZodError) {
-        throw new ConcourseError('INVALID_SPEC', `concourse 结构非法：${err.message}`);
+        // F4：不再把 ZodError.message（多行 JSON）拼进中文句子，结构化 issues 返回
+        // F2：未知字段与结构错误一并返回（笔误往往同时导致「缺必填」）
+        throw new ConcourseError(
+          'INVALID_SPEC',
+          `concourse 结构非法：${zodErrorSummary(err)}`,
+          [...unknownKeyIssues, ...zodErrorToIssues(err)],
+        );
       }
       throw err;
     }
-    const issues = validateConcourse(concourse);
+    const issues = [...unknownKeyIssues, ...validateConcourse(concourse)];
     if (issues.length > 0) {
       throw new ConcourseError(
         'INVALID_SPEC',
@@ -308,12 +331,21 @@ export class ConcourseService {
     return entry;
   }
 
-  /** spec 为对象且 id 缺失/空串时注入 idGen 生成的 id。 */
+  /**
+   * spec 为对象且 id 缺失/空串时注入 idGen 生成的 id。
+   * F5（2026-10-18 真机测试）：生成前对照已存在 id 撞号跳过——即使 idGen 的
+   * 计数器未播种（自定义 idGen、或回放里含手工命名的 concourse-N），也不会
+   * 把「自动生成」变成「必撞号」。
+   */
   private ensureId(spec: unknown): unknown {
     if (typeof spec !== 'object' || spec === null || Array.isArray(spec)) return spec;
     const obj = spec as Record<string, unknown>;
     if (typeof obj['id'] === 'string' && obj['id'].length > 0) return spec;
-    return { ...obj, id: this.idGen() };
+    for (let attempt = 0; attempt < 1000; attempt += 1) {
+      const id = this.idGen();
+      if (!this.entries.has(id)) return { ...obj, id };
+    }
+    throw new ConcourseError('INVALID_SPEC', 'concourse id 自动生成失败：连续 1000 次撞号');
   }
 
   /**

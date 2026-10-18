@@ -75,6 +75,37 @@ describe('team_topology', () => {
     await expect(tool.execute({}, fakeExec())).rejects.toThrow();
   });
 
+  test('F2 回归：spec 内部未知字段 → UNKNOWN_FIELD issue（不再是静默 strip）', async () => {
+    const fx = makeFixture();
+    const tool = createTeamTopologyTool(fx.deps);
+    const out = (await tool.execute(
+      { spec: { ...SAMPLE_SPEC, tasks: [{ id: 't1', subject: 's', assigniee: 'a' }] } },
+      fakeExec(),
+    )) as TopologyOut;
+    expect(out.ok).toBe(false);
+    const hit = out.issues.find((i) => i.code === 'UNKNOWN_FIELD');
+    expect(hit).toBeDefined();
+    expect(hit?.path).toBe('tasks[0].assigniee');
+    expect(hit?.message).toContain('assignee');
+  });
+
+  test('F3 回归：parse 阶段 issues 无 path 时 render 不产生双空格', () => {
+    const fx = makeFixture();
+    const tool = createTeamTopologyTool(fx.deps);
+    const rendered = tool.output.render(
+      {},
+      {
+        ok: false,
+        stage: 'parse',
+        issues: [{ code: 'SCHEMA', message: 'Expected object, received string' }],
+        suggestions: [],
+      } as never,
+    );
+    const text = rendered.map((r) => ('text' in r ? r.text : '')).join('\n');
+    expect(text).toContain('✗ Expected object, received string');
+    expect(text).not.toContain('✗  Expected');
+  });
+
   test('输出 schema 为闭合对象；description 带 team_task_* 边界约定', () => {
     const fx = makeFixture();
     const tool = createTeamTopologyTool(fx.deps);

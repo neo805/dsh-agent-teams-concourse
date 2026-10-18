@@ -68,6 +68,25 @@ describe('suggest · effort 映射', () => {
     const s = suggest(baseProfile({ cognitive: 3 }), catalog);
     expect(s.reasoningEffort).toBe('off');
   });
+
+  it('F1 回归（2026-10-18 真机）：原生档名 max 归一化为 high，不再按 default 位次零距离胜出', () => {
+    const catalog: ModelInfo[] = [
+      { provider: 'p', model: 'deepseek-flash', efforts: ['off', 'max'], contextWindow: 999999, tier: 'balanced' },
+    ];
+    // wanted=default：off 距离 2、max→high 距离 1 → 选 max（旧行为是 max 距离 0 必然胜出）
+    const s = suggest(baseProfile({ cognitive: 3 }), catalog);
+    expect(s.reasoningEffort).toBe('max');
+    expect(s.rationale.some((r) => r.includes('off<low<default<high'))).toBe(true);
+    expect(s.rationale.some((r) => r.includes('原生档位 max'))).toBe(true);
+  });
+
+  it('F1 回归：原生档名 medium 归一化为 default，直接命中目标档', () => {
+    const catalog: ModelInfo[] = [
+      { provider: 'p', model: 'm', efforts: ['low', 'medium', 'high'], contextWindow: 999999, tier: 'balanced' },
+    ];
+    const s = suggest(baseProfile({ cognitive: 3 }), catalog);
+    expect(s.reasoningEffort).toBe('medium');
+  });
 });
 
 describe('suggest · tier 与 toolFilter', () => {

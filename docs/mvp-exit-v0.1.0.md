@@ -83,6 +83,10 @@
 9. **inject 新增 `agents`**（0.2.1 适配）：cordis 对未在 inject 声明的属性取值会
    直接抛错；逐顶点工具面收口需要 `ctx.agents`，故声明。宿主缺失该服务时插件
    按 cordis 语义不激活（fail-loud，不静默降级）。
+10. **create 事件内嵌整份 spec**（真机测试 F6，接受）：`detail.concourse` 携带完整
+    concourse（含任务文本与回填预算），台账随任务文本线性膨胀；回放需要完整
+    spec 才能重建，去掉内嵌等价于引入外部引用与一致性风险，MVP 接受。若后续
+   台账成为瓶颈，可改为「快照文件 + create 事件引用哈希」的持久化设计（P5）。
 
 ### 真机测试修复批次（2026-10-17，session-68cefdca 交叉核验后，commit aec9172）
 

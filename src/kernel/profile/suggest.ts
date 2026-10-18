@@ -37,8 +37,33 @@ export interface ChoiceError {
  *  把「中等认知任务」退化成「关掉推理」（2026-10-17 真机实测实证）。 */
 const EFFORT_ORDER = ['off', 'low', 'default', 'high'] as const;
 
+/**
+ * 模型原生档位名 → 规范档位（2026-10-18 真机测试 F1）。
+ * 各 Provider 的 effort 命名不统一（deepseek 有 `max`，其它有 `medium`/`minimal`/
+ * `xhigh` 等）；不归一化时未知档名被当作 default 位次，wanted=default 时距离 0
+ * 直接胜出，等于把常规任务升到模型最高档，而 rationale 又声称「按 low<default<high
+ * 取最近邻」——自相矛盾。这里先把常见原生名映射到规范四档，再做距离比较。
+ */
+const EFFORT_ALIASES: Readonly<Record<string, (typeof EFFORT_ORDER)[number]>> = {
+  off: 'off',
+  none: 'off',
+  minimal: 'off',
+  low: 'low',
+  medium: 'default',
+  default: 'default',
+  high: 'high',
+  xhigh: 'high',
+  max: 'high',
+  maximum: 'high',
+};
+
+/** 规范档位（未知原生名原样返回，由 effortIndex 按 default 位次兜底）。 */
+function normalizeEffort(e: string): string {
+  return EFFORT_ALIASES[e] ?? e;
+}
+
 function effortIndex(e: string): number {
-  const i = EFFORT_ORDER.indexOf(e as (typeof EFFORT_ORDER)[number]);
+  const i = EFFORT_ORDER.indexOf(normalizeEffort(e) as (typeof EFFORT_ORDER)[number]);
   return i === -1 ? EFFORT_ORDER.indexOf('default') : i; // 未知档按 default 位次参与距离计算（确定性）
 }
 
@@ -132,7 +157,14 @@ export function suggest(profile: DifficultyProfile, catalog: ModelInfo[]): Sugge
   let reasoningEffort = wanted;
   if (!chosen.efforts.includes(wanted)) {
     reasoningEffort = nearestEffort(chosen.efforts, wanted);
-    rationale.push(`effort 降级：${chosen.model} 不支持 ${wanted}，按 low<default<high 取最近邻 ${reasoningEffort}`);
+    const normalized = normalizeEffort(reasoningEffort);
+    const aliasNote =
+      normalized !== reasoningEffort
+        ? `（原生档位 ${reasoningEffort} 按 ${normalized} 参与比较）`
+        : '';
+    rationale.push(
+      `effort 降级：${chosen.model} 不支持 ${wanted}，按 ${EFFORT_ORDER.join('<')} 取最近邻 ${reasoningEffort}${aliasNote}`,
+    );
   }
 
   // —— maxDepth ——

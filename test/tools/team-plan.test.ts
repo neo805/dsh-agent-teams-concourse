@@ -80,6 +80,41 @@ describe('team_plan', () => {
     await expect(tool.execute({}, fakeExec())).rejects.toThrow();
   });
 
+  test('F4 回归：结构非法 → issues 规范化（code=SCHEMA + path），render 不再直出 Zod JSON', async () => {
+    const fx = makeFixture();
+    const tool = createTeamPlanTool(fx.deps);
+    const out = (await tool.execute({ spec: { id: 'x', tier: 'T9', vertices: [] } }, fakeExec())) as PlanOut;
+    expect(out.ok).toBe(false);
+    expect(out.code).toBe('INVALID_SPEC');
+    expect(out.issues.length).toBeGreaterThan(0);
+    expect(out.issues.every((i) => i.code === 'SCHEMA')).toBe(true);
+    expect(out.issues.some((i) => (i as { path?: string }).path !== undefined)).toBe(true);
+    expect(out.message ?? '').not.toContain('[\n');
+    // render 带 path，且不含多行 JSON
+    const rendered = tool.output.render({}, out as never);
+    const text = rendered.map((r) => ('text' in r ? r.text : '')).join('\n');
+    expect(text).toContain('[SCHEMA]');
+    expect(text).not.toContain('"code": "invalid_type"');
+    expect(fx.service.list()).toHaveLength(0);
+  });
+
+  test('F2 回归：spec 内部未知字段 → UNKNOWN_FIELD issue，零落库', async () => {
+    const fx = makeFixture();
+    const tool = createTeamPlanTool(fx.deps);
+    const out = (await tool.execute(
+      { spec: { ...SAMPLE_SPEC, approvel: 'once' } },
+      fakeExec(),
+    )) as PlanOut;
+    expect(out.ok).toBe(false);
+    const hit = out.issues.find((i) => i.code === 'UNKNOWN_FIELD') as
+      | { code: string; path?: string; message: string }
+      | undefined;
+    expect(hit).toBeDefined();
+    expect(hit?.path).toBe('approvel');
+    expect(hit?.message).toContain('approval');
+    expect(fx.service.list()).toHaveLength(0);
+  });
+
   test('输出 schema 为闭合对象；description 带 team_task_* 边界约定', () => {
     const fx = makeFixture();
     const tool = createTeamPlanTool(fx.deps);
