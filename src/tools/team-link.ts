@@ -20,7 +20,7 @@ export function createTeamLinkTool(deps: TeamToolsDeps) {
       action: { type: 'string', enum: ['open', 'close'], required: true, description: 'open 开边 / close 闭边' },
       mode: { type: 'string', enum: ['request-reply', 'notify', 'board'], description: '开边时的通信模式（缺省 notify）' },
       wake: { type: 'string', enum: ['always', 'on-reply', 'never'], description: '开边时的唤醒策略（缺省 never）' },
-      hopTTL: { type: 'integer', description: '开边时的 hop 上限（缺省 2）' },
+      hopTTL: { type: 'integer', description: '开边时的 hop 上限（缺省 2，必须 >=1；越界由 Edge schema 拒绝）' },
     },
     output: {
       schema: {

@@ -13,7 +13,7 @@
  */
 import { randomUUID } from 'node:crypto';
 import { ZodError } from 'zod';
-import { parseConcourse, type Concourse, type Vertex } from '../kernel/topology/schema.js';
+import { Edge, parseConcourse, type Concourse, type Vertex } from '../kernel/topology/schema.js';
 import { validateConcourse } from '../kernel/topology/validate.js';
 import {
   findUnknownKeyIssues,
@@ -525,16 +525,30 @@ export class ConcourseService {
     if (!ids.has(input.from) || !ids.has(input.to)) {
       throw new ConcourseError('UNKNOWN_VERTEX', `顶点不存在：${[input.from, input.to].filter((v) => !ids.has(v)).join(' / ')}`);
     }
-    const detail =
-      input.action === 'open'
-        ? {
-            from: input.from,
-            to: input.to,
-            mode: input.mode ?? 'notify',
-            wake: input.wake ?? 'never',
-            hopTTL: input.hopTTL ?? 2,
-          }
-        : { from: input.from, to: input.to };
+    let detail: Record<string, unknown>;
+    if (input.action === 'open') {
+      try {
+        // 与计划期同一条 Edge schema：非法参数在写台账、改拓扑之前 fail-loud。
+        detail = Edge.parse({
+          from: input.from,
+          to: input.to,
+          mode: input.mode ?? 'notify',
+          wake: input.wake ?? 'never',
+          hopTTL: input.hopTTL ?? 2,
+        }) as unknown as Record<string, unknown>;
+      } catch (err) {
+        if (err instanceof ZodError) {
+          throw new ConcourseError(
+            'INVALID_SPEC',
+            `边参数非法：${zodErrorSummary(err)}`,
+            zodErrorToIssues(err),
+          );
+        }
+        throw err;
+      }
+    } else {
+      detail = { from: input.from, to: input.to };
+    }
     this.ledger.append({
       concourseId: id,
       kind: 'lifecycle',

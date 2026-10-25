@@ -80,7 +80,10 @@ export class BudgetBook {
       const prior = this.edgeRemaining.get(key);
       next.edgeRemaining.set(key, prior ?? budget);
     }
-    for (const key of this.fusedEdges) next.fusedEdges.add(key);
+    // 边被删除（新预算表不再登记）时同步丢弃旧 fuse；仅保留仍在预算表中的边。
+    for (const key of this.fusedEdges) {
+      if (Object.hasOwn(edgeBudgets, key)) next.fusedEdges.add(key);
+    }
     next.globalFused = this.globalFused;
     return next;
   }

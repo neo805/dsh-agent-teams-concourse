@@ -22,7 +22,11 @@ export function contentDigest(content: string): string {
 }
 
 /**
- * 生成稳定去重键：hash(tuple(from,to,correlationId?,digest))。
+ * 生成稳定去重键：完整 tuple(from,to,correlationId,content) 的无歧义 JSON framing。
+ *
+ * 这里刻意不做有损哈希：32 位 FNV 不能承担唯一消息身份（已知
+ * contentDigest('costarring') === contentDigest('liquid')），碰撞会把不同正文
+ * 误判为重复。contentDigest 仅保留为诊断/分桶工具，不参与身份判定。
  * correlationId 缺省用空串占位——显式空串与缺省等价（文档承诺）。
  */
 export function dedupKey(parts: {
@@ -32,9 +36,7 @@ export function dedupKey(parts: {
   content: string;
 }): string {
   const corr = parts.correlationId ?? '';
-  return contentDigest(
-    encodeTuple([parts.from, parts.to, corr, contentDigest(parts.content)]),
-  );
+  return encodeTuple([parts.from, parts.to, corr, parts.content]);
 }
 
 /** 内存去重计数器：record 幂等登记，重复返回 duplicate=true 并累计。 */

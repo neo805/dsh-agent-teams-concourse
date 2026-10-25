@@ -102,16 +102,19 @@ describe('team_link', () => {
     expect(fx.ledger.query({ action: 'edge-close' })).toHaveLength(1);
   });
 
-  test('hopTTL 必须 >=1：0/负数在工具入参边界被拒，零台账', async () => {
+  test('hopTTL 必须 >=1：0/负数返回 INVALID_SPEC，零台账零拓扑变化', async () => {
     const fx = makeFixture();
     await makeRunning(fx);
     const tool = createTeamLinkTool(fx.deps);
-    await expect(
-      tool.execute({ id: 'demo', from: 'a', to: 'b', action: 'open', hopTTL: 0 }, fakeExec()),
-    ).rejects.toThrow();
-    await expect(
-      tool.execute({ id: 'demo', from: 'a', to: 'b', action: 'open', hopTTL: -1 }, fakeExec()),
-    ).rejects.toThrow();
+    const before = fx.service.get('demo').concourse.edges;
+    for (const hopTTL of [0, -1]) {
+      const out = (await tool.execute(
+        { id: 'demo', from: 'a', to: 'b', action: 'open', hopTTL },
+        fakeExec(),
+      )) as LinkOut;
+      expect(out).toMatchObject({ ok: false, code: 'INVALID_SPEC' });
+    }
+    expect(fx.service.get('demo').concourse.edges).toEqual(before);
     expect(fx.ledger.query({ action: 'edge-open' })).toHaveLength(0);
   });
 
