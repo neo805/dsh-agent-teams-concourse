@@ -609,7 +609,7 @@ export class ConcourseService {
     for (const v of c.vertices) {
       if (v.model === undefined) continue; // effort-only 继承父模型，无法独立判档
       try {
-        await this.catalog.assertSupported(v.model, v.reasoningEffort);
+        await this.catalog.assertSupported(v.model, v.reasoningEffort, v.provider);
       } catch (err) {
         throw new ConcourseError(
           'APPROVE_FAILED',
@@ -700,6 +700,7 @@ export class ConcourseService {
       vertexId: v.id,
       label: v.role ?? v.id,
       prompt: this.promptOf(v, c),
+      ...(v.provider !== undefined ? { provider: v.provider } : {}),
       ...(v.model !== undefined ? { model: v.model } : {}),
       ...(v.reasoningEffort !== undefined ? { reasoningEffort: v.reasoningEffort } : {}),
       ...(v.toolFilter !== undefined ? { toolFilter: this.toolFilterOf(v.toolFilter) } : {}),

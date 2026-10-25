@@ -79,6 +79,21 @@ export function registerTeamTools(
   const tools = createTeamTools(deps).filter(
     (t) => scope === 'leader' || (MEMBER_TOOL_NAMES as readonly string[]).includes(t.name),
   );
-  for (const t of tools) register(t);
+  const disposers: unknown[] = [];
+  try {
+    for (const t of tools) disposers.push(register(t));
+  } catch (err) {
+    // 同组注册是局部事务：中途失败时逆序撤销已成功的工具，避免半套能力。
+    for (let i = disposers.length - 1; i >= 0; i -= 1) {
+      const dispose = disposers[i];
+      if (typeof dispose !== 'function') continue;
+      try {
+        dispose();
+      } catch {
+        // 清理失败不得覆盖原始注册错误；入口会记录原始失败。
+      }
+    }
+    throw err;
+  }
   return tools.map((t) => t.name);
 }

@@ -13,6 +13,8 @@ export interface VertexStart {
   readonly label: string;
   /** 首条任务提示词（纯文本）。 */
   readonly prompt: string;
+  /** 逐顶点 provider 路由；省略 = 继承父代理。 */
+  readonly provider?: string;
   /** 逐顶点模型定档；省略 = 继承父代理。 */
   readonly model?: string;
   /** 逐顶点推理档位；省略 = 继承父代理。 */
@@ -88,7 +90,7 @@ export interface Catalog {
    * 校验 model（+可选 effort）在白名单内；不在则 throw typed error，
    * message 附完整可选值列表（fail-loud， FR-4.4）。
    */
-  assertSupported(model: string, effort?: string): Promise<void>;
+  assertSupported(model: string, effort?: string, provider?: string): Promise<void>;
 }
 
 /** concourse 自有 provider 名（路线 A 注册用，P2 探针同名族）。 */

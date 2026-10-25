@@ -63,7 +63,7 @@ export interface ActivationStartSpecLike {
   request: {
     prompt: readonly { type: 'text'; text: string }[];
     parent: unknown;
-    agentOptions?: { model?: string; reasoningEffort?: string };
+    agentOptions?: { provider?: string; model?: string; reasoningEffort?: string };
     maxDepth?: number;
   };
   signal: AbortSignal;
@@ -119,6 +119,19 @@ export function createSubstrate(deps: SubstrateDeps): Substrate {
   const parents = new Map<string, unknown>();
   /** childId → activation 句柄（interrupt 时停止并释放）。 */
   const activations = new Map<string, ActivationLike>();
+  /**
+   * 已成功释放的 childId 轻量 tombstone：重复 interrupt 保持 no-op。
+   * 有界存储，避免长驻进程因历史顶点无限增长；授权 parent 不进入该集合。
+   */
+  const released = new Set<string>();
+  const RELEASED_LIMIT = 1024;
+  function markReleased(childId: string): void {
+    released.add(childId);
+    if (released.size > RELEASED_LIMIT) {
+      const oldest = released.values().next().value;
+      if (oldest !== undefined) released.delete(oldest);
+    }
+  }
 
   if (subagents === undefined) {
     const degraded = <T>(vertexId: string, op: string): Promise<T> =>
@@ -170,9 +183,14 @@ export function createSubstrate(deps: SubstrateDeps): Substrate {
 
   async function startVertex(spec: VertexStart, parent: unknown, signal?: AbortSignal): Promise<VertexHandle> {
     // 逐字段条件装配：可选项缺席时对应键不出现
-    let agentOptions: { model?: string; reasoningEffort?: string } | undefined;
-    if (spec.model !== undefined || spec.reasoningEffort !== undefined) {
+    let agentOptions: { provider?: string; model?: string; reasoningEffort?: string } | undefined;
+    if (
+      spec.provider !== undefined ||
+      spec.model !== undefined ||
+      spec.reasoningEffort !== undefined
+    ) {
       agentOptions = {
+        ...(spec.provider !== undefined ? { provider: spec.provider } : {}),
         ...(spec.model !== undefined ? { model: spec.model } : {}),
         ...(spec.reasoningEffort !== undefined ? { reasoningEffort: spec.reasoningEffort } : {}),
       };
@@ -268,6 +286,7 @@ export function createSubstrate(deps: SubstrateDeps): Substrate {
   }
 
   async function interrupt(handle: VertexHandle): Promise<void> {
+    if (released.has(handle.childId)) return;
     let parent: unknown;
     try {
       parent = requireParent('INTERRUPT_FAILED', handle, 'interrupt');
@@ -286,13 +305,12 @@ export function createSubstrate(deps: SubstrateDeps): Substrate {
       );
     }
     // 停止信号已发出；再经 activation.dispose 等待静默并释放资源（尽力而为）。
-    // parents 保留：重复 interrupt 时宿主对缺席目标视为已接受 no-op（幂等）。
     const activation = activations.get(handle.childId);
     if (activation !== undefined) {
       try {
         await activation.dispose();
       } catch (e) {
-        // 释放失败不得提前遗忘 activation：保留句柄，允许调用方修复环境后重试。
+        // 释放失败不得提前遗忘 activation/parent：保留句柄，允许修复环境后重试。
         throw new SubstrateError(
           'INTERRUPT_FAILED',
           handle.vertexId,
@@ -302,6 +320,9 @@ export function createSubstrate(deps: SubstrateDeps): Substrate {
       }
       activations.delete(handle.childId);
     }
+    // 成功释放后不再持有 parent Agent 强引用；幂等性由轻量 tombstone 承担。
+    parents.delete(handle.childId);
+    markReleased(handle.childId);
   }
 
   return { mode: 'full', startVertex, deliver, interrupt };

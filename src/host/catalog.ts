@@ -90,14 +90,16 @@ export function createCatalog(deps: CatalogDeps): Catalog {
     return cache;
   }
 
-  /** model 匹配：接受 bare model 或 'provider/model' 两种写法。 */
+  /** model 匹配：接受 bare model 或 'provider/model' 两种写法；provider 显式给出时再收窄路由。 */
   function matches(entry: ModelInfo, model: string): boolean {
     return entry.model === model || `${entry.provider}/${entry.model}` === model;
   }
 
-  async function assertSupported(model: string, effort?: string): Promise<void> {
+  async function assertSupported(model: string, effort?: string, provider?: string): Promise<void> {
     const entries = await list();
-    const hit = entries.find((e) => matches(e, model));
+    const hit = entries.find(
+      (e) => matches(e, model) && (provider === undefined || e.provider === provider),
+    );
     if (hit === undefined) {
       throw new CatalogError(
         'UNSUPPORTED_MODEL',
