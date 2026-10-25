@@ -17,6 +17,7 @@ interface FakeCtx {
   subagents: FakeSubagents;
   tools: {
     registered: ToolDefinition[];
+    active: Set<string>;
     failOn?: string;
     register(def: ToolDefinition): () => void;
   };
@@ -31,10 +32,14 @@ function makeCtx(): FakeCtx {
     subagents: new FakeSubagents(),
     tools: {
       registered: [],
+      active: new Set<string>(),
       register(def: ToolDefinition) {
         if (this.failOn === def.name) throw new Error(`register ${def.name} boom`);
         this.registered.push(def);
-        return () => undefined;
+        this.active.add(def.name);
+        return () => {
+          this.active.delete(def.name);
+        };
       },
     },
     logger: {
@@ -103,6 +108,16 @@ describe('cordis 入口', () => {
     await apply(ctx, { enabled: true });
     expect(ctx.subagents.registerCalls).toHaveLength(1);
     expect(ctx.logger.warns.some((w) => w.includes('boom'))).toBe(true);
+  });
+
+  test('NFR-2：工具组中途注册失败 → 已注册项全部回滚，provider 与 pre-step 继续装配', async () => {
+    const ctx = makeCtx();
+    ctx.tools.failOn = 'team_assign';
+    await apply(ctx, { enabled: true });
+    expect(ctx.tools.active.size).toBe(0);
+    expect(ctx.subagents.registerCalls).toHaveLength(1);
+    expect(ctx.listeners.map((l) => l.event)).toContain('agent/pre-step');
+    expect(ctx.logger.warns.some((w) => w.includes('team_assign') && w.includes('boom'))).toBe(true);
   });
 
   test('NFR-2：ctx 整体为 null → 不 throw（全降级）', async () => {

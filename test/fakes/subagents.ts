@@ -14,7 +14,7 @@
 export interface FakeActivationRequest {
   prompt: readonly unknown[];
   parent: unknown;
-  agentOptions?: { model?: string; reasoningEffort?: string };
+  agentOptions?: { provider?: string; model?: string; reasoningEffort?: string };
   maxDepth?: number;
 }
 

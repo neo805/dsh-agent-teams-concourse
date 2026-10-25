@@ -11,6 +11,8 @@ import { BudgetBook } from '../../src/kernel/comms/budget.js';
 import { estimateConcourseBudget } from '../../src/kernel/budget/tokens.js';
 import { parseConcourse, type ConcourseInput } from '../../src/kernel/topology/schema.js';
 import { StubSubstrate, fakeClock } from './helpers.js';
+import { createCatalog } from '../../src/host/catalog.js';
+import { FakeLLM } from '../fakes/llm.js';
 
 /** 合法 T1b 样例输入（captain → lead → w-1），带一条任务用于预算回填。 */
 function t1bInput(): ConcourseInput {
@@ -273,11 +275,12 @@ describe('approve 语义', () => {
     expect(layers.indexOf('lead')).toBeLessThan(layers.indexOf('w-1'));
   });
 
-  it('VertexStart 逐顶点定档透传（model/reasoningEffort/toolFilter/maxDepth）', async () => {
+  it('VertexStart 逐顶点定档透传（provider/model/reasoningEffort/toolFilter/maxDepth）', async () => {
     const { service, substrate } = makeService();
     const input = t1bInput();
     (input.vertices as Record<string, unknown>[])[2] = {
       ...(input.vertices as Record<string, unknown>[])[2]!,
+      provider: 'p2',
       model: 'kimi-k3',
       reasoningEffort: 'high',
       toolFilter: { deny: ['send_message'] },
@@ -287,6 +290,7 @@ describe('approve 语义', () => {
     service.submit('c-t1b');
     await service.approve('c-t1b', null);
     const w1 = substrate.started.find((s) => s.vertexId === 'w-1');
+    expect(w1?.provider).toBe('p2');
     expect(w1?.model).toBe('kimi-k3');
     expect(w1?.reasoningEffort).toBe('high');
     expect(w1?.toolFilter).toEqual({ deny: ['send_message'] });
@@ -295,6 +299,39 @@ describe('approve 语义', () => {
     const lead = substrate.started.find((s) => s.vertexId === 'lead');
     expect(lead).not.toHaveProperty('model');
     expect(lead).not.toHaveProperty('reasoningEffort');
+  });
+
+  it('provider 参与预检：跨 provider 同名模型按显式路由判定，不误用第一条', async () => {
+    const catalog = createCatalog({
+      llm: new FakeLLM({
+        providers: [
+          { id: 'p1', models: [{ id: 'shared-model', efforts: ['low'] }] },
+          { id: 'p2', models: [{ id: 'shared-model', efforts: ['high'] }] },
+        ],
+      }),
+    });
+    const substrate = new StubSubstrate();
+    const service = new ConcourseService({
+      substrate,
+      ledger: new Ledger({ now: fakeClock() }),
+      catalog,
+      now: fakeClock(),
+    });
+    const input = t1bInput();
+    (input.vertices as Record<string, unknown>[])[2] = {
+      ...(input.vertices as Record<string, unknown>[])[2]!,
+      provider: 'p2',
+      model: 'shared-model',
+      reasoningEffort: 'high',
+    };
+    service.create(input);
+    service.submit('c-t1b');
+    await expect(service.approve('c-t1b', null)).resolves.toHaveLength(2);
+    expect(substrate.started.find((s) => s.vertexId === 'w-1')).toMatchObject({
+      provider: 'p2',
+      model: 'shared-model',
+      reasoningEffort: 'high',
+    });
   });
 
   it('台账记录 requested vs effective（inherit 可辨）', async () => {

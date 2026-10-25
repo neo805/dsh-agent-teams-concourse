@@ -45,6 +45,22 @@ describe('host/catalog（FR-4.4 枚举 + fail-loud + 缓存 + 缺席降级）', 
     await expect(catalog.assertSupported('deepseek-chat', 'high')).resolves.toBeUndefined();
   });
 
+  it('assertSupported：指定 provider 时按 provider+model 路由，同名模型不串档', async () => {
+    const catalog = createCatalog({
+      llm: new FakeLLM({
+        providers: [
+          { id: 'p1', models: [{ id: 'shared-model', efforts: ['low'] }] },
+          { id: 'p2', models: [{ id: 'shared-model', efforts: ['high'] }] },
+        ],
+      }),
+    });
+    await expect(catalog.assertSupported('shared-model', 'high', 'p2')).resolves.toBeUndefined();
+    const err = await catalog.assertSupported('shared-model', 'high', 'p1').catch((e: unknown) => e);
+    expect((err as CatalogError).code).toBe('UNSUPPORTED_EFFORT');
+    const missing = await catalog.assertSupported('shared-model', undefined, 'ghost').catch((e: unknown) => e);
+    expect((missing as CatalogError).code).toBe('UNSUPPORTED_MODEL');
+  });
+
   it('assertSupported：未知 model fail-loud，message 附完整可选值列表', async () => {
     const catalog = createCatalog({ llm: stdLlm() });
     const err = await catalog.assertSupported('no-such-model').catch((e: unknown) => e);

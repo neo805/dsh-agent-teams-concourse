@@ -12,6 +12,7 @@ const fullSpec: VertexStart = {
   prompt: '实现任务 X',
   model: 'deepseek-chat',
   reasoningEffort: 'high',
+  provider: 'p2',
   toolFilter: { deny: ['send_message'] },
   maxDepth: 3,
 };
@@ -42,7 +43,11 @@ describe('host/substrate（VertexStart → startActivation 装配透传，DSH 0.
     expect(spec?.label).toBe('worker-1');
     expect(spec?.request.prompt).toEqual([{ type: 'text', text: '实现任务 X' }]);
     expect(spec?.request.parent).toBe(parent);
-    expect(spec?.request.agentOptions).toEqual({ model: 'deepseek-chat', reasoningEffort: 'high' });
+    expect(spec?.request.agentOptions).toEqual({
+      provider: 'p2',
+      model: 'deepseek-chat',
+      reasoningEffort: 'high',
+    });
     expect(spec?.request.maxDepth).toBe(3);
     expect(spec?.delivery).toBe('parent');
     expect(spec?.signal.aborted).toBe(false);
@@ -224,6 +229,17 @@ describe('host/substrate（VertexStart → startActivation 装配透传，DSH 0.
     await substrate2.interrupt(h2);
     await substrate2.interrupt(h2);
     expect(fake2.disposeCalls).toEqual([{ childId: 'child-1' }]);
+  });
+
+  it('成功 interrupt 后 parent 引用释放；重复调用由 tombstone 幂等吸收，不再触达宿主', async () => {
+    const fake = new FakeSubagents();
+    const agents = withAgents(fake);
+    const substrate = createSubstrate({ subagents: fake, agents });
+    const handle = await substrate.startVertex(fullSpec, parent);
+    await substrate.interrupt(handle);
+    await substrate.interrupt(handle);
+    expect(fake.interruptCalls).toHaveLength(1);
+    expect(fake.disposeCalls).toHaveLength(1);
   });
 
   it('宿主 interrupt 抛错 → INTERRUPT_FAILED；未知顶点 → INTERRUPT_FAILED', async () => {
