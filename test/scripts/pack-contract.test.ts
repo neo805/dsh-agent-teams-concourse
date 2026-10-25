@@ -30,6 +30,7 @@ describe('pack 必需文件契约', () => {
       'dist/index.js': 'export {};\n',
       'dist/index.d.ts': 'export {};\n',
       'dist/client/index.cjs': 'window.__ModuleLoader__.load({});\n',
+      'dist/client/index.d.cts': 'export {};\n',
     };
   }
 
@@ -42,6 +43,12 @@ describe('pack 必需文件契约', () => {
     const files = complete();
     delete files['README.zh.md'];
     expect(packedFileIssues(pkg(files)).join('\n')).toContain('README.zh.md');
+  });
+
+  it('客户端类型导出缺失同样破坏 pack 契约', () => {
+    const files = complete();
+    delete files['dist/client/index.d.cts'];
+    expect(packedFileIssues(pkg(files)).join('\n')).toContain('dist/client/index.d.cts');
   });
 
   it('空 patch 视为不可装载', () => {

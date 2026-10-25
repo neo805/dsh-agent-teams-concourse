@@ -2,7 +2,7 @@
  * scripts/corpus-regression.mjs 端到端测试。
  * dist 缺失时先 pnpm build（脚本依赖 tsdown 产物），再以 child_process 运行脚本。
  */
-import { execSync, spawnSync } from 'node:child_process';
+import { spawnSync } from 'node:child_process';
 import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -23,8 +23,7 @@ afterEach(() => {
 
 describe('corpus-regression 脚本', () => {
   it('退出码 0 且生成含命中率的临时报告（不修改入库文档）', { timeout: 120_000 }, () => {
-    // 独立 pnpm test 也不能消费旧 dist：每次都先构建当前源码。
-    execSync('pnpm build', { cwd: ROOT, stdio: 'inherit' });
+    // dist 由 Vitest globalSetup 在整次测试调用开始时构建一次，worker 只读。
     const report = join(tempDir(), 'report.md');
     const r = spawnSync('node', ['scripts/corpus-regression.mjs', '--report', report], {
       cwd: ROOT,

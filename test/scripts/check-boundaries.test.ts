@@ -30,6 +30,14 @@ describe('check-boundaries（§3 模块依赖方向门禁）', () => {
     expect(run(fx('violation-direction'))).toBe(1);
   });
 
+  it('未登记的新层默认拒绝，不能 fail-open 绕过依赖方向', () => {
+    expect(run(fx('violation-unknown-layer'))).toBe(1);
+  });
+
+  it('CommonJS require 与 import 同等受边界约束（kernel 不得 require node:）', () => {
+    expect(run(fx('violation-kernel-require'))).toBe(1);
+  });
+
   it('仓库自身 src/ 通过（永久基线：此用例不许变红）', () => {
     expect(run(repo)).toBe(0);
   });

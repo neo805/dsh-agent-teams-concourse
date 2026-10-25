@@ -1,0 +1,6 @@
+{
+  "name": "violation-package-asset",
+  "version": "1.0.0",
+  "files": ["icon.svg", "dist"],
+  "dsh": { "manifestVersion": 1 }
+}

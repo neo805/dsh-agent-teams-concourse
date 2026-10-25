@@ -34,6 +34,10 @@ describe('check-no-assets（NFR-3 零美术资产门禁）', () => {
     expect(run(fx('violation-dist-image'))).toBe(1);
   });
 
+  it('package.json files 收录的包根图片同样违规', () => {
+    expect(run(fx('violation-package-asset'))).toBe(1);
+  });
+
   it('仓库自身 src/ 通过（永久基线：此用例不许变红）', () => {
     expect(run(repo)).toBe(0);
   });

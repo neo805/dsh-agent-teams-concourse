@@ -1,17 +1,11 @@
-import { execSync, spawnSync } from 'node:child_process';
-import { cpSync, existsSync, mkdtempSync, rmSync, utimesSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
+import { cpSync, mkdtempSync, rmSync, utimesSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 
 const ROOT = join(__dirname, '..', '..');
 const DIST_FILES = ['dist/kernel/profile/profiler.js', 'dist/kernel/profile/suggest.js'];
-
-function ensureDist(): void {
-  if (!DIST_FILES.every((f) => existsSync(join(ROOT, f)))) {
-    execSync('pnpm build', { cwd: ROOT, stdio: 'inherit' });
-  }
-}
 
 describe('corpus-regression 产物新鲜度', () => {
   const dirs: string[] = [];
@@ -20,7 +14,6 @@ describe('corpus-regression 产物新鲜度', () => {
   });
 
   it('dist 早于源码时 fail-loud（退出码 2），不得验证旧代码', () => {
-    ensureDist();
     const dir = mkdtempSync(join(tmpdir(), 'concourse-corpus-stale-'));
     dirs.push(dir);
     const staleDist = join(dir, 'dist');
