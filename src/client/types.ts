@@ -3,7 +3,7 @@
  *
  * 字段与 service 的 ConcourseRecord / Ledger.echoCounts 对齐，但独立声明：
  * client 是浏览器侧独立 bundle，不允许 import service（依赖方向门禁）。
- * 宿主侧（src/index.ts）把领域快照登记为会话投影后，由面板体转配成本类型（P5 接线，见 BRIDGE.md）。
+ * 宿主侧（src/index.ts）把领域快照登记为会话投影后，由面板体转配成本类型（P7 接线，见 BRIDGE.md）。
  */
 import type { Status } from '../kernel/glyphs.js';
 
@@ -110,7 +110,8 @@ export interface PlanEdgeRow {
   readonly kind: string;
   readonly hopTTL: number;
   readonly rate?: string;
-  readonly wake: boolean;
+  /** 三态唤醒策略；不得压成 boolean（on-reply 与 never 语义不同）。 */
+  readonly wake: 'always' | 'on-reply' | 'never';
 }
 
 /** 计划审批视图（§7.6.3 唯一审批界面，一次审批信息完备）。 */

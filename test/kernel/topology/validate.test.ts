@@ -167,6 +167,39 @@ describe('kernel/topology/validate（语义校验，不 throw，空数组=通过
     expect(hit?.message).toContain('bad-root');
   });
 
+  it('DUPLICATE_TASK_ID：任务 id 唯一，重复项逐条定位', () => {
+    const c = parseConcourse({
+      id: 'x',
+      tier: 'T0',
+      vertices: [{ id: 'solo', origin: 'self' }],
+      tasks: [
+        { id: 'T-1', subject: '做 A', assignee: 'solo' },
+        { id: 'T-1', subject: '做 B', assignee: 'solo', dependencies: ['T-1'] },
+      ],
+    });
+    const hit = validateConcourse(c).find((i) => i.code === 'DUPLICATE_TASK_ID');
+    expect(hit).toBeDefined();
+    expect(hit?.path).toBe('tasks[1].id');
+  });
+
+  it('复合边键不碰撞：a→b,c 与 a,b→c 是两条不同边', () => {
+    const c = parseConcourse({
+      id: 'x',
+      tier: 'T0',
+      vertices: [
+        { id: 'a→b', origin: 'self' },
+        { id: 'c', parent: 'a→b', layer: 1 },
+        { id: 'a', parent: 'a→b', layer: 1 },
+        { id: 'b→c', parent: 'a→b', layer: 1 },
+      ],
+      edges: [
+        { from: 'a→b', to: 'c' },
+        { from: 'a', to: 'b→c' },
+      ],
+    });
+    expect(codes(c)).not.toContain('DUPLICATE_EDGE');
+  });
+
   it('DANGLING_ASSIGNEE / DANGLING_DEPENDENCY：任务引用不存在', () => {
     const c = parseConcourse({
       id: 'x',

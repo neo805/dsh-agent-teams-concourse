@@ -1,25 +1,21 @@
 /**
  * tools/deps — 工具组共享依赖注入面与输出 schema 公共片段。
  */
-import type { Catalog, Substrate } from '../host/contracts.js';
+import type { Catalog } from '../host/contracts.js';
 import type { ConcourseService } from '../service/concourse.js';
 import type { Ledger } from '../service/ledger.js';
+import type { SchemaIssue } from '../kernel/topology/issues.js';
 
 /** 六个 team_* 工具的共享依赖（apply 装配 / 测试注入 stub）。 */
 export interface TeamToolsDeps {
   readonly service: ConcourseService;
   readonly ledger: Ledger;
-  readonly substrate: Substrate;
   /** 模型目录；缺席时 team_topology 的派发建议段为空（降级不崩溃）。 */
   readonly catalog?: Catalog;
 }
 
-/** 统一 issue 形态（结构/语义校验共用）。 */
-export interface ToolIssue {
-  code: string;
-  message: string;
-  path?: string;
-}
+/** 工具层沿用 kernel 的唯一 issue 形态，不另造平行类型。 */
+export type ToolIssue = SchemaIssue;
 
 /** issues 输出 schema 片段（闭合对象数组；required 在使用点展开）。 */
 export const ISSUE_SCHEMA = {

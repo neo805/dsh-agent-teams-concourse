@@ -4,6 +4,7 @@
  * 字段：tier · 顶点数 · 活跃数 · 开放边 x/y · 预算条（▰▱ 文字条）· 回声计数 · 熔断标记。
  * 开放边总数口径：有向完全图 n*(n-1)，与 team_status/kernel 共用。
  */
+import { budgetBar } from '../kernel/glyphs.js';
 import { directedEdgeCapacity } from '../kernel/topology/edges.js';
 import type { ConcourseView } from './types.js';
 
@@ -11,12 +12,7 @@ export interface OverviewLineProps {
   readonly view: ConcourseView;
 }
 
-/** 预算文字条：10 格 ▰▱，四舍五入（与 kernel formatOverviewLine 同口径）。 */
-export function budgetBar(pct: number): string {
-  const clamped = Math.max(0, Math.min(100, pct));
-  const filled = Math.round(clamped / 10);
-  return '▰'.repeat(filled) + '▱'.repeat(10 - filled);
-}
+export { budgetBar } from '../kernel/glyphs.js';
 
 /** 活跃数口径：active 与 running 都计为活跃。 */
 function activeCount(view: ConcourseView): number {

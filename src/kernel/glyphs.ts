@@ -36,8 +36,10 @@ export interface TreeVertex {
 export function renderTree(vertices: TreeVertex[], opts?: { status?: Record<string, Status> }): string[] {
   const status = opts?.status ?? {};
   const glyphOf = (id: string): string => {
-    const s = status[id];
-    return (s !== undefined ? GLYPHS[s] : GLYPHS.idle).shape; // 缺省状态 ○
+    // id/status 都由用户 spec 驱动，必须只读自有属性，不能命中原型链。
+    const s = Object.hasOwn(status, id) ? status[id] : undefined;
+    const glyph = s !== undefined && Object.hasOwn(GLYPHS, s) ? GLYPHS[s] : GLYPHS.idle;
+    return glyph.shape; // 缺省状态 ○
   };
 
   // 兄弟分组，保持声明序。
@@ -69,6 +71,13 @@ export function renderTree(vertices: TreeVertex[], opts?: { status?: Record<stri
   return lines;
 }
 
+/** 预算文字条：10 格 ▰▱，百分比先 clamp 再四舍五入（展示百分比保留原值）。 */
+export function budgetBar(budgetPct: number): string {
+  const visual = Math.max(0, Math.min(100, budgetPct));
+  const filled = Math.round(visual / 10);
+  return '▰'.repeat(filled) + '▱'.repeat(10 - filled);
+}
+
 /** L0 单行总览。budgetPct 缺省时省略预算段；进度条 10 格 ▰▱，四舍五入。 */
 export function formatOverviewLine(stats: {
   tier: string;
@@ -90,9 +99,7 @@ export function formatOverviewLine(stats: {
     `开放边 ${stats.openEdges}/${stats.totalEdges}`,
   ];
   if (stats.budgetPct !== undefined) {
-    const filled = Math.round(stats.budgetPct / 10);
-    const bar = '▰'.repeat(filled) + '▱'.repeat(10 - filled);
-    parts.push(`预算 ${bar} ${stats.budgetPct}%`);
+    parts.push(`预算 ${budgetBar(stats.budgetPct)} ${stats.budgetPct}%`);
   }
   parts.push(`回声 ${stats.echo}`, `熔断 ${stats.fused}`);
   return parts.join(' · ');

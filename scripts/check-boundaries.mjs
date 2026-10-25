@@ -14,16 +14,28 @@
  * 退出码：0 通过；1 检出越界。
  */
 import { readdirSync, readFileSync, statSync } from 'node:fs';
-import { dirname, join, normalize, relative, resolve, sep } from 'node:path';
+import { dirname, isAbsolute, join, normalize, relative, resolve, sep } from 'node:path';
 import { argv, cwd, exit } from 'node:process';
 
-/** 各层的禁止规则。forbidDirs：相对 import 解析后落在这些顶层目录即违规。 */
+/**
+ * 各层允许的相对依赖目标（正向白名单）。
+ * 未登记的新层不在任何 allowDirs 中，因而默认拒绝；index 是 src 根入口层。
+ */
 const RULES = {
-  kernel: { forbidDirs: ['host', 'service', 'tools', 'client'], forbidExternal: [/^(node|bun):/, /^@deepseek-ai\//], allowExternal: ['zod'] },
-  host: { forbidDirs: ['service', 'tools', 'client'] },
-  service: { forbidDirs: ['tools', 'client'] },
-  tools: { forbidDirs: ['client'] },
-  client: { forbidDirs: ['host', 'service', 'tools'], forbidExternal: [/^(node|bun):/, /^@deepseek-ai\//], allowExternal: ['react', 'react-dom', 'react/jsx-runtime'] },
+  kernel: {
+    allowDirs: ['kernel'],
+    forbidExternal: [/^(node|bun):/, /^@deepseek-ai\//],
+    allowExternal: ['zod'],
+  },
+  host: { allowDirs: ['host', 'kernel'] },
+  service: { allowDirs: ['service', 'host', 'kernel'] },
+  tools: { allowDirs: ['tools', 'service', 'host', 'kernel'] },
+  client: {
+    allowDirs: ['client', 'kernel'],
+    forbidExternal: [/^(node|bun):/, /^@deepseek-ai\//],
+    allowExternal: ['react', 'react-dom', 'react/jsx-runtime'],
+  },
+  index: { allowDirs: ['index', 'kernel', 'host', 'service', 'tools'] },
 };
 
 const IMPORT_RE = /(?:import|export)\s+(?:[^'"]*?\s+from\s+)?['"]([^'"]+)['"]/g;
@@ -34,10 +46,17 @@ function parseRoot() {
   return resolve(i >= 0 && argv[i + 1] ? argv[i + 1] : cwd());
 }
 
-/** 取 src/ 下的顶层模块目录名（kernel/host/service/tools/client/…）。 */
-function topDir(srcRoot, file) {
+/** src/ 根文件统一归 index 层；其余取顶层目录名。 */
+function layerOf(srcRoot, file) {
   const rel = relative(srcRoot, file);
-  return rel.split(sep)[0];
+  const parts = rel.split(sep);
+  return parts.length === 1 ? 'index' : parts[0];
+}
+
+/** target 是否确实位于 srcRoot 内（不能用字符串前缀判断）。 */
+function isInside(srcRoot, target) {
+  const rel = relative(srcRoot, target);
+  return rel.length > 0 && rel !== '..' && !rel.startsWith(`..${sep}`) && !isAbsolute(rel);
 }
 
 /** 收集一个文件里的全部 import 说明符。 */
@@ -71,16 +90,20 @@ export function scan(root) {
         continue;
       }
       if (!/\.(ts|tsx|js|mjs)$/.test(entry)) continue;
-      const layer = topDir(srcRoot, full);
+      const layer = layerOf(srcRoot, full);
       const rule = RULES[layer];
-      if (!rule) continue; // src 根或非受管目录（如未来新增层需先登记规则）
+      if (!rule) continue; // 未登记的新层不在白名单内，其出边不构成已授权依赖
       const rel = relative(root, full);
       for (const spec of specifiers(readFileSync(full, 'utf8'))) {
         if (spec.startsWith('.') || spec.startsWith('/') || /^[A-Za-z]:/.test(spec)) {
-          // 相对/绝对路径：解析后判定落在哪个顶层目录。
+          // 相对/绝对路径：必须留在 src 内，且目标层在正向白名单中。
           const target = normalize(join(dirname(full), spec));
-          const targetLayer = target.startsWith(srcRoot) ? topDir(srcRoot, target) : null;
-          if (targetLayer && rule.forbidDirs.includes(targetLayer)) {
+          if (!isInside(srcRoot, target)) {
+            violations.push(`${rel} — ${layer} 的相对依赖越出 src（import "${spec}"）`);
+            continue;
+          }
+          const targetLayer = layerOf(srcRoot, target);
+          if (!rule.allowDirs.includes(targetLayer)) {
             violations.push(`${rel} — ${layer} 不得依赖 ${targetLayer}（import "${spec}"）`);
           }
         } else {

@@ -161,6 +161,35 @@ describe('host/substrate（VertexStart → startActivation 装配透传，DSH 0.
     expect((error as Error).message).toContain('INBOX_CLOSED');
   });
 
+  it('两个 concourse 复用同名 vertexId：interrupt 只命中各自 childId，不跨团队 dispose', async () => {
+    const fake = new FakeSubagents();
+    const agents = new FakeAgents();
+    agents.agents.set('child-1', new FakeAgent('child-1'));
+    agents.agents.set('child-2', new FakeAgent('child-2'));
+    const substrate = createSubstrate({ subagents: fake, agents });
+    const parentA = { id: 'parent-a' };
+    const parentB = { id: 'parent-b' };
+
+    const a = await substrate.startVertex({ vertexId: 'same', label: 'a', prompt: 'A' }, parentA);
+    const b = await substrate.startVertex({ vertexId: 'same', label: 'b', prompt: 'B' }, parentB);
+    expect(a.childId).toBe('child-1');
+    expect(b.childId).toBe('child-2');
+
+    await substrate.interrupt(a);
+    expect(fake.interruptCalls.at(-1)).toEqual({
+      targetId: 'child-1',
+      authority: { kind: 'ancestor', agent: parentA },
+    });
+    expect(fake.disposeCalls).toEqual([{ childId: 'child-1' }]);
+
+    await substrate.interrupt(b);
+    expect(fake.interruptCalls.at(-1)).toEqual({
+      targetId: 'child-2',
+      authority: { kind: 'ancestor', agent: parentB },
+    });
+    expect(fake.disposeCalls).toEqual([{ childId: 'child-1' }, { childId: 'child-2' }]);
+  });
+
   it('interrupt 走宿主 interrupt(childId, {kind:ancestor}) 并 dispose 释放激活', async () => {
     const fake = new FakeSubagents();
     const agents = withAgents(fake);
@@ -173,7 +202,7 @@ describe('host/substrate（VertexStart → startActivation 装配透传，DSH 0.
     expect(fake.disposeCalls).toEqual([{ childId: 'child-1' }]);
   });
 
-  it('dispose 失败 → INTERRUPT_FAILED；重复 interrupt 不再 dispose（句柄已释放）', async () => {
+  it('dispose 失败保留句柄可重试；成功后的重复 interrupt 不再 dispose', async () => {
     const fake = new FakeSubagents();
     fake.disposeError = new Error('teardown failed');
     const agents = withAgents(fake);
@@ -183,7 +212,12 @@ describe('host/substrate（VertexStart → startActivation 装配透传，DSH 0.
     expect((err as SubstrateError).code).toBe('INTERRUPT_FAILED');
     expect((err as Error).message).toContain('teardown failed');
 
-    // 首次 dispose 已把句柄从表中移除；第二次 interrupt 不再触发 dispose（幂等）
+    // 失败不能提前遗忘激活：故障消失后同一 handle 可重试并成功释放。
+    delete fake.disposeError;
+    await expect(substrate.interrupt(handle)).resolves.toBeUndefined();
+    expect(fake.disposeCalls).toEqual([{ childId: 'child-1' }, { childId: 'child-1' }]);
+
+    // 第二次成功 interrupt 后句柄已释放；再次调用不再 dispose（幂等）。
     const fake2 = new FakeSubagents();
     const substrate2 = createSubstrate({ subagents: fake2, agents: new FakeAgents() });
     const h2 = await substrate2.startVertex({ vertexId: 'v9', label: 'w', prompt: 'p' }, parent);

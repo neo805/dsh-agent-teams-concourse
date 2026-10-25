@@ -70,7 +70,7 @@ export function createTeamAssignTool(deps: TeamToolsDeps) {
         const rec = deps.service.get(args.id);
         const byVertex = new Map(handles.map((h) => [h.vertexId, h.childId]));
         const vertices = rec.concourse.vertices.map((v) => {
-          const rve = deps.ledger.requestedVsEffective(v.id);
+          const rve = deps.ledger.requestedVsEffective(rec.concourse.id, v.id);
           const childId = byVertex.get(v.id);
           return {
             vertexId: v.id,

@@ -21,8 +21,9 @@ import {
   zodErrorToIssues,
   type SchemaIssue,
 } from '../kernel/topology/issues.js';
-import { estimateConcourseBudget } from '../kernel/budget/tokens.js';
-import type { Substrate, VertexHandle, VertexStart } from '../host/contracts.js';
+import { normalizeConcourseBudgets } from '../kernel/budget/normalize.js';
+import { BudgetBook } from '../kernel/comms/budget.js';
+import type { Catalog, Substrate, VertexHandle, VertexStart } from '../host/contracts.js';
 import type { EdgeMode, Wake } from '../kernel/topology/schema.js';
 import type { Ledger } from './ledger.js';
 import {
@@ -34,7 +35,11 @@ import {
   type ConcourseRuntime,
   type InboundMessage,
 } from './inbox-gate.js';
-import { applyEdgeLifecycle, type ConcourseStatus, type ReplayState } from './persistence.js';
+import {
+  applyEdgeLifecycleWithBudget,
+  type ConcourseStatus,
+  type ReplayState,
+} from './persistence.js';
 
 export type { ConcourseStatus } from './persistence.js';
 
@@ -122,6 +127,8 @@ type MessageLike = {
 export interface ConcourseServiceDeps {
   readonly substrate: Substrate;
   readonly ledger: Ledger;
+  /** 可选模型目录；存在时 approve 在写 intent/拉起前对全部显式定档做白名单预检。 */
+  readonly catalog?: Catalog;
   readonly now?: () => number;
   /** id 生成（默认计数器式可读 id：concourse-1、concourse-2…，禁 Math.random）。 */
   readonly idGen?: () => string;
@@ -140,14 +147,15 @@ const ALLOWED_FROM: Record<'submit' | 'approve' | 'reject' | 'archive', readonly
 export class ConcourseService {
   private readonly substrate: Substrate;
   private readonly ledger: Ledger;
+  private readonly catalog: Catalog | undefined;
   private readonly now: () => number;
   private readonly idGen: () => string;
   private readonly entries = new Map<string, Entry>();
-  private readonly order: string[] = [];
 
   constructor(deps: ConcourseServiceDeps) {
     this.substrate = deps.substrate;
     this.ledger = deps.ledger;
+    this.catalog = deps.catalog;
     this.now = deps.now ?? (() => Date.now());
     let counter = 0;
     this.idGen = deps.idGen ?? (() => `concourse-${(counter += 1)}`);
@@ -156,12 +164,11 @@ export class ConcourseService {
       this.entries.set(rc.concourse.id, {
         concourse: rc.concourse,
         status: rc.status,
-        createdAt: 0,
+        createdAt: rc.createdAt,
         handles: [...rc.handles],
         ...(rc.rootSessionId !== undefined ? { rootSessionId: rc.rootSessionId } : {}),
         runtime: { ...createRuntime(rc.concourse, { now: this.now }), budget: rc.budget },
       });
-      this.order.push(rc.concourse.id);
     }
     // F5（2026-10-18 真机测试）：计数器在进程内从 0 起，回放不播种 → 重启后首个
     // 缺 id 的 create 必生成已被占用的 concourse-1。这里以回放条目中形如
@@ -175,8 +182,8 @@ export class ConcourseService {
 
   /**
    * 创建 concourse（draft）：
-   * parseConcourse 结构解析 → validateConcourse 语义校验（有 issue 即 throw
-   * ConcourseError(INVALID_SPEC) 附 issue 列表）→ kernel tokens 估算回填预算。
+   * parseConcourse 结构解析 → 共享预算规范化 → validateConcourse 语义校验
+   * （有 issue 即 throw ConcourseError(INVALID_SPEC) 附 issue 列表）→ 落库。
    */
   create(spec: unknown): ConcourseRecord {
     // spec 缺 id 时由注入 idGen 生成（zod 要求 id 非空，先补后解析）
@@ -199,6 +206,7 @@ export class ConcourseService {
       }
       throw err;
     }
+    concourse = normalizeConcourseBudgets(concourse);
     const issues = [...unknownKeyIssues, ...validateConcourse(concourse)];
     if (issues.length > 0) {
       throw new ConcourseError(
@@ -207,8 +215,6 @@ export class ConcourseService {
         issues,
       );
     }
-    concourse = this.backfillBudget(concourse);
-    this.assertBudgetInvariant(concourse);
     if (this.entries.has(concourse.id)) {
       throw new ConcourseError('INVALID_SPEC', `concourse id「${concourse.id}」已存在`);
     }
@@ -227,7 +233,6 @@ export class ConcourseService {
       runtime: createRuntime(concourse, { now: this.now }),
     };
     this.entries.set(concourse.id, entry);
-    this.order.push(concourse.id);
     return this.recordOf(entry);
   }
 
@@ -272,6 +277,8 @@ export class ConcourseService {
     signal: AbortSignal,
   ): Promise<VertexHandle[]> {
     const id = entry.concourse.id;
+    // 全顶点定档预检必须先于 intent/start：后面的非法顶点不能造成先拉起再回滚。
+    await this.preflightModels(entry.concourse);
     const rootSessionId = agentIdOf(parent);
     // 先落 approve-intent：写盘失败时不拉起任何顶点。
     this.ledger.append({
@@ -534,20 +541,34 @@ export class ConcourseService {
       action: input.action === 'open' ? 'edge-open' : 'edge-close',
       detail,
     });
-    const next = applyEdgeLifecycle(entry.concourse, input.action === 'open' ? 'edge-open' : 'edge-close', detail);
+    const nextState = applyEdgeLifecycleWithBudget(
+      entry.concourse,
+      entry.runtime.budget,
+      input.action === 'open' ? 'edge-open' : 'edge-close',
+      detail,
+    );
+    const next = nextState.concourse;
     const runtime = createRuntime(next, { now: this.now });
-    const edgeBudgets: Record<string, number> = {};
-    for (const edge of next.edges) {
-      if (edge.budget?.tokens !== undefined) {
-        edgeBudgets[`${edge.from}->${edge.to}`] = edge.budget.tokens;
+    // 只重建新增/配置变化的边限流器；未变边的滑动窗口必须继续有效。
+    const previousEdges = new Map(
+      entry.runtime.concourse.edges.map((edge) => [BudgetBook.edgeKey(edge.from, edge.to), edge]),
+    );
+    const nextEdges = new Map(next.edges.map((edge) => [BudgetBook.edgeKey(edge.from, edge.to), edge]));
+    const rate = new Map(runtime.rate);
+    for (const [key, limiter] of entry.runtime.rate) {
+      const before = previousEdges.get(key)?.rate;
+      const after = nextEdges.get(key)?.rate;
+      if (before !== undefined && after !== undefined && before.n === after.n && before.perMs === after.perMs) {
+        rate.set(key, limiter);
       }
     }
     entry.concourse = next;
     entry.runtime = {
       ...runtime,
+      rate,
       dedup: entry.runtime.dedup,
       admissions: entry.runtime.admissions,
-      budget: entry.runtime.budget.withEdgeBudgets(edgeBudgets),
+      budget: nextState.budget,
     };
     return { concourse: next, openEdges: next.edges.length };
   }
@@ -557,7 +578,8 @@ export class ConcourseService {
   }
 
   list(): ConcourseRecord[] {
-    return this.order.map((id) => this.recordOf(this.entries.get(id)!));
+    // Map 保证插入序，无需另维护 order 数组（create/replay 顺序即声明序）。
+    return [...this.entries.values()].map((entry) => this.recordOf(entry));
   }
 
   /** 通信运行时（收件箱准入 inbox-gate 的输入；随生命周期存活）。 */
@@ -566,6 +588,24 @@ export class ConcourseService {
   }
 
   // ── 内部 ──
+
+  /** 对全部显式 model(+effort) 做白名单预检；任一失败即 typed error，零副作用。 */
+  private async preflightModels(c: Concourse): Promise<void> {
+    if (this.catalog === undefined) return;
+    for (const v of c.vertices) {
+      if (v.model === undefined) continue; // effort-only 继承父模型，无法独立判档
+      try {
+        await this.catalog.assertSupported(v.model, v.reasoningEffort);
+      } catch (err) {
+        throw new ConcourseError(
+          'APPROVE_FAILED',
+          `模型/档位预检失败（未拉起任何顶点）：${errorMessage(err)}`,
+          undefined,
+          errorCode(err),
+        );
+      }
+    }
+  }
 
   private mustGet(id: string): Entry {
     const entry = this.entries.get(id);
@@ -638,36 +678,6 @@ export class ConcourseService {
       if (!this.entries.has(id)) return { ...obj, id };
     }
     throw new ConcourseError('INVALID_SPEC', 'concourse id 自动生成失败：连续 1000 次撞号');
-  }
-
-  /**
-   * 预算回填（仅补缺省）：顶点无 budget.tokens 且有任务估算 → 回填；
-   * concourse 未声明总预算且估算总和 > 0 → 回填。
-   */
-  private backfillBudget(c: Concourse): Concourse {
-    const est = estimateConcourseBudget(c);
-    const vertices = c.vertices.map((v) => {
-      const per = est.perVertex[v.id];
-      if (v.budget?.tokens !== undefined || per === undefined || per <= 0) return v;
-      return { ...v, budget: { ...v.budget, tokens: Math.ceil(per) } };
-    });
-    const budget =
-      c.budget?.tokens !== undefined || est.total <= 0
-        ? c.budget
-        : { tokens: Math.ceil(est.total) };
-    return { ...c, vertices, ...(budget !== undefined ? { budget } : {}) };
-  }
-
-  /** 回填后复查最终预算不变量，避免保存出“顶点总额度 > 全局预算”的自相矛盾 spec。 */
-  private assertBudgetInvariant(c: Concourse): void {
-    if (c.budget?.tokens === undefined) return;
-    const total = c.vertices.reduce((sum, v) => sum + (v.budget?.tokens ?? 0), 0);
-    if (total <= c.budget.tokens) return;
-    throw new ConcourseError(
-      'INVALID_SPEC',
-      `预算回填后顶点总额度 ${total} 超过 concourse 总预算 ${c.budget.tokens}`,
-      [{ code: 'BUDGET_OVERFLOW', message: `顶点预算合计 ${total} 超过全局预算 ${c.budget.tokens}`, path: 'budget.tokens' }],
-    );
   }
 
   /** 顶点 → VertexStart（未声明的定档键不写入 = 继承父代理）。 */

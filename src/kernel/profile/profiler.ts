@@ -31,10 +31,31 @@ const IMPLEMENT_WORDS = ['实现', '开发', '修复', '接入', '做一', 'impl
 /** 口语并列连词：真实中文里最常见的多任务信号。 */
 const ORAL_CONNECTORS = ['然后', '另外', '还有就是', '还要', '再把'];
 
+/** ASCII 词字符：拉丁字母/数字/下划线。CJK 与符号不参与边界判断。 */
+function isAsciiWordChar(ch: string | undefined): boolean {
+  return ch !== undefined && /^[a-z0-9_]$/i.test(ch);
+}
+
+/** 纯 ASCII 词用词边界匹配，避免 fix 命中 prefix/fixture。 */
+function hasBoundedAscii(lowerText: string, lowerWord: string): boolean {
+  let from = 0;
+  for (;;) {
+    const idx = lowerText.indexOf(lowerWord, from);
+    if (idx === -1) return false;
+    const before = idx === 0 ? undefined : lowerText[idx - 1];
+    const after = lowerText[idx + lowerWord.length];
+    if (!isAsciiWordChar(before) && !isAsciiWordChar(after)) return true;
+    from = idx + 1;
+  }
+}
+
 /** 返回命中的词表（大小写不敏感；保序、去重）。 */
 function matchWords(text: string, words: readonly string[]): string[] {
   const lower = text.toLowerCase();
-  return words.filter((w) => lower.includes(w.toLowerCase()));
+  return words.filter((w) => {
+    const word = w.toLowerCase();
+    return /^[a-z0-9_]+$/.test(word) ? hasBoundedAscii(lower, word) : lower.includes(word);
+  });
 }
 
 /** 统计全局出现次数（用于口语连词计数）。 */

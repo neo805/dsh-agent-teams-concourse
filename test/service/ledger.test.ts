@@ -92,15 +92,36 @@ describe('Ledger.requestedVsEffective', () => {
       },
     });
 
-    const rve1 = ledger.requestedVsEffective('w-1');
+    const rve1 = ledger.requestedVsEffective('c1', 'w-1');
     expect(rve1?.requested).toEqual({ model: 'kimi-k3', reasoningEffort: 'high' });
     expect(rve1?.effective).toEqual({ model: 'kimi-k3', reasoningEffort: 'high' });
 
-    const rve2 = ledger.requestedVsEffective('w-2');
+    const rve2 = ledger.requestedVsEffective('c1', 'w-2');
     expect(rve2?.requested).toEqual({ model: null, reasoningEffort: null });
     expect(rve2?.effective).toEqual({ model: 'inherit', reasoningEffort: 'inherit' });
 
-    expect(ledger.requestedVsEffective('ghost')).toBeUndefined();
+    expect(ledger.requestedVsEffective('c1', 'ghost')).toBeUndefined();
+  });
+
+  it('同 vertexId 跨 concourse 不串：按 (concourseId, vertexId) 取各自最近记录', () => {
+    const ledger = new Ledger({ now: fakeClock() });
+    const append = (concourseId: string, model: string) =>
+      ledger.append({
+        concourseId,
+        kind: 'lifecycle',
+        action: 'vertex-start',
+        detail: {
+          vertexId: 'w-1',
+          requested: { model, reasoningEffort: 'high' },
+          effective: { model, reasoningEffort: 'high' },
+        },
+      });
+
+    append('c1', 'model-a');
+    append('c2', 'model-b');
+    expect(ledger.requestedVsEffective('c1', 'w-1')?.requested.model).toBe('model-a');
+    expect(ledger.requestedVsEffective('c2', 'w-1')?.requested.model).toBe('model-b');
+    expect(ledger.requestedVsEffective('c3', 'w-1')).toBeUndefined();
   });
 });
 

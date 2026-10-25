@@ -9,7 +9,6 @@ import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 
 const ROOT = join(__dirname, '..', '..');
-const DIST_FILES = ['dist/kernel/profile/profiler.js', 'dist/kernel/profile/suggest.js'];
 const tempDirs: string[] = [];
 
 function tempDir(): string {
@@ -24,9 +23,8 @@ afterEach(() => {
 
 describe('corpus-regression 脚本', () => {
   it('退出码 0 且生成含命中率的临时报告（不修改入库文档）', { timeout: 120_000 }, () => {
-    if (!DIST_FILES.every((f) => existsSync(join(ROOT, f)))) {
-      execSync('pnpm build', { cwd: ROOT, stdio: 'inherit' });
-    }
+    // 独立 pnpm test 也不能消费旧 dist：每次都先构建当前源码。
+    execSync('pnpm build', { cwd: ROOT, stdio: 'inherit' });
     const report = join(tempDir(), 'report.md');
     const r = spawnSync('node', ['scripts/corpus-regression.mjs', '--report', report], {
       cwd: ROOT,

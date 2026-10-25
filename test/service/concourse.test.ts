@@ -85,6 +85,7 @@ describe('ConcourseService.create', () => {
         {
           concourse: restored,
           status: 'pending-approval' as const,
+          createdAt: 0,
           handles: [],
           budget: new BudgetBook({}),
         },
@@ -301,10 +302,10 @@ describe('approve 语义', () => {
     service.create(t1bInput()); // w-1 reasoningEffort=low，无 model
     service.submit('c-t1b');
     await service.approve('c-t1b', null);
-    const rve = ledger.requestedVsEffective('w-1');
+    const rve = ledger.requestedVsEffective('c-t1b', 'w-1');
     expect(rve?.requested).toEqual({ model: null, reasoningEffort: 'low' });
     expect(rve?.effective).toEqual({ model: 'inherit', reasoningEffort: 'low' });
-    const cap = ledger.requestedVsEffective('captain');
+    const cap = ledger.requestedVsEffective('c-t1b', 'captain');
     expect(cap).toBeUndefined(); // self 顶点不拉起，无 requested-vs-effective 记录
   });
 

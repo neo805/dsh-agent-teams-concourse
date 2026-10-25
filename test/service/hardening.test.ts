@@ -2,7 +2,7 @@
  * 0.2.1 T2/T3 —— 持久化原子性、重启恢复、改边回放、审批 single-flight 与取消。
  */
 import { describe, expect, test } from 'vitest';
-import { ConcourseService } from '../../src/service/concourse.js';
+import { ConcourseError, ConcourseService } from '../../src/service/concourse.js';
 import { Ledger, type LedgerEvent } from '../../src/service/ledger.js';
 import { replay } from '../../src/service/persistence.js';
 import { createTeamSendTool } from '../../src/tools/team-send.js';
@@ -62,7 +62,14 @@ describe('T2 写盘原子性', () => {
       ...SAMPLE_SPEC,
       budget: { tokens: 100 },
     };
-    expect(() => service.create(input)).toThrowError(/预算回填后/);
+    try {
+      service.create(input);
+      expect.unreachable('应当抛出 BUDGET_OVERFLOW');
+    } catch (err) {
+      expect(err).toBeInstanceOf(ConcourseError);
+      expect((err as ConcourseError).code).toBe('INVALID_SPEC');
+      expect((err as ConcourseError).issues?.some((i) => i.code === 'BUDGET_OVERFLOW')).toBe(true);
+    }
     expect(service.list()).toEqual([]);
   });
 });
@@ -77,11 +84,11 @@ describe('T2 重启恢复与改边回放', () => {
     service1.create(SAMPLE_SPEC);
     service1.submit('demo');
     await service1.approve('demo', { id: ROOT_AGENT_ID });
-    await createTeamSendTool({ service: service1, ledger: ledger1, substrate: substrate1 }).execute(
+    await createTeamSendTool({ service: service1, ledger: ledger1 }).execute(
       { id: 'demo', from: 'lead', to: 'a', content: 'before restart' },
       fakeExec({ id: ROOT_AGENT_ID }),
     );
-    await createTeamLinkTool({ service: service1, ledger: ledger1, substrate: substrate1 }).execute(
+    await createTeamLinkTool({ service: service1, ledger: ledger1 }).execute(
       { id: 'demo', from: 'lead', to: 'a', action: 'close' },
       fakeExec(),
     );
@@ -126,7 +133,6 @@ describe('T2 重启恢复与改边回放', () => {
     const out = (await createTeamSendTool({
       service: service2,
       ledger: ledger2,
-      substrate: substrate2,
     }).execute(
       { id: 'demo', from: 'lead', to: 'a', content: 'after restart' },
       fakeExec({ id: ROOT_AGENT_ID }),

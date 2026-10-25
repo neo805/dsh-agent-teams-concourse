@@ -10,10 +10,11 @@
  * 依赖 tsdown 构建产物 dist/kernel/profile/{profiler,suggest}.js；缺失时退出码 2。
  * 用法：node scripts/corpus-regression.mjs [--corpus <path>] [--report <path>]
  */
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { dirname, join, relative, resolve, sep } from 'node:path';
 import { argv, exit } from 'node:process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { corpusPass, formatPct } from './corpus-metrics.mjs';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -26,12 +27,24 @@ const DIST_ROOT = argOf('dist', join(ROOT, 'dist'));
 const PROFILER_DIST = join(DIST_ROOT, 'kernel', 'profile', 'profiler.js');
 const SUGGEST_DIST = join(DIST_ROOT, 'kernel', 'profile', 'suggest.js');
 
-// dist 前置检测：缺失 → 提示先 build，退出码 2。
+// dist 前置检测：缺失或早于源码 → 提示先 build，退出码 2（绝不验证旧代码）。
 for (const f of [PROFILER_DIST, SUGGEST_DIST]) {
   if (!existsSync(f)) {
     console.error(`[corpus-regression] 缺少构建产物 ${f}，请先运行 pnpm build`);
     exit(2);
   }
+}
+
+const PROFILE_SOURCES = [
+  join(ROOT, 'src/kernel/profile/profiler.ts'),
+  join(ROOT, 'src/kernel/profile/suggest.ts'),
+  join(ROOT, 'src/kernel/profile/effort.ts'),
+].filter((f) => existsSync(f));
+const newestSource = Math.max(0, ...PROFILE_SOURCES.map((f) => statSync(f).mtimeMs));
+const oldestDist = Math.min(statSync(PROFILER_DIST).mtimeMs, statSync(SUGGEST_DIST).mtimeMs);
+if (newestSource > oldestDist) {
+  console.error('[corpus-regression] 构建产物已过期（早于 kernel/profile 源码），请先运行 pnpm build');
+  exit(2);
 }
 
 const CORPUS = argOf('corpus', join(ROOT, 'test', 'fixtures', 'corpus', 'public.jsonl'));
@@ -72,7 +85,6 @@ for (const [idx, line] of lines.entries()) {
 }
 
 // —— 统计 ——
-const pct = (n, d) => (d === 0 ? 0 : Math.round((n / d) * 1000) / 10);
 const total = rows.length;
 const effortExact = rows.filter((r) => r.actual.effort === r.expect.effort).length;
 const effortNear = rows.filter(
@@ -98,7 +110,8 @@ const effortBias = bias(EFFORT_ORDER, (x) => x.effort);
 const tierBias = bias(TIER_ORDER, (x) => x.tier);
 
 // —— 报告 ——
-const pass = pct(effortExact, total) >= 50 && pct(effortNear, total) >= 85 && pct(tierExact, total) >= 70;
+// 门禁用原始计数比例，展示才用四舍五入后的百分比。
+const pass = corpusPass({ total, effortExact, effortNear, tierExact });
 const md = [
   '# 语料回归报告（P1）',
   '',
@@ -111,9 +124,9 @@ const md = [
   '',
   '| 指标 | 命中率 | 命中/总数 |',
   '| --- | --- | --- |',
-  `| effort exact | ${pct(effortExact, total)}% | ${effortExact}/${total} |`,
-  `| effort ±1 档 | ${pct(effortNear, total)}% | ${effortNear}/${total} |`,
-  `| tier exact | ${pct(tierExact, total)}% | ${tierExact}/${total} |`,
+  `| effort exact | ${formatPct(effortExact, total)} | ${effortExact}/${total} |`,
+  `| effort ±1 档 | ${formatPct(effortNear, total)} | ${effortNear}/${total} |`,
+  `| tier exact | ${formatPct(tierExact, total)} | ${tierExact}/${total} |`,
   '',
   `**判定：${pass ? '通过（退出码 0）' : '未达标（退出码 1）'}**`,
   '',
@@ -147,6 +160,6 @@ const md = [
 
 mkdirSync(dirname(REPORT), { recursive: true });
 writeFileSync(REPORT, md, 'utf8');
-console.log(`[corpus-regression] effort exact ${pct(effortExact, total)}% · ±1 ${pct(effortNear, total)}% · tier exact ${pct(tierExact, total)}% → ${pass ? '通过' : '未达标'}`);
+console.log(`[corpus-regression] effort exact ${formatPct(effortExact, total)} · ±1 ${formatPct(effortNear, total)} · tier exact ${formatPct(tierExact, total)} → ${pass ? '通过' : '未达标'}`);
 console.log(`[corpus-regression] 报告已写入 ${REPORT}`);
 exit(pass ? 0 : 1);

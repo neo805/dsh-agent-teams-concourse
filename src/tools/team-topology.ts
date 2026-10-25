@@ -13,6 +13,7 @@ import {
 } from '../kernel/topology/issues.js';
 import { classify, TIER_LABELS } from '../kernel/topology/tier.js';
 import { estimateConcourseBudget } from '../kernel/budget/tokens.js';
+import { normalizeConcourseBudgets } from '../kernel/budget/normalize.js';
 import { suggest } from '../kernel/profile/suggest.js';
 import { assertKnownKeys } from './keys.js';
 import { BOUNDARY_NOTE, ISSUE_SCHEMA, type TeamToolsDeps } from './deps.js';
@@ -65,7 +66,7 @@ async function buildSuggestions(deps: TeamToolsDeps, c: Concourse): Promise<Sugg
 export function createTeamTopologyTool(deps: TeamToolsDeps) {
   return defineTool({
     name: 'team_topology',
-    description: `预览 concourse 虚拟拓扑团队：结构解析 + 语义校验 + 谱系（T1a–T4）判定 + 逐任务模型/档位派发建议。纯预览，不落库、不提交审批。${BOUNDARY_NOTE}`,
+    description: `预览 concourse 虚拟拓扑团队：结构解析 + 语义校验 + 谱系（T0/T1a/T1b/T1.5/T2a）判定 + 逐任务模型/档位派发建议。纯预览，不落库、不提交审批。${BOUNDARY_NOTE}`,
     parameters: {
       spec: { type: 'json', required: true, description: 'concourse spec（JSON 对象，见 §7.8.1 数据模型）' },
     },
@@ -167,6 +168,8 @@ export function createTeamTopologyTool(deps: TeamToolsDeps) {
         }
         throw err;
       }
+      // 与 team_plan/service.create 共用同一条预算规范化管线，再执行语义校验。
+      c = normalizeConcourseBudgets(c);
       const issues = [...unknownKeyIssues, ...validateConcourse(c)];
       const est = estimateConcourseBudget(c);
       const suggestions = await buildSuggestions(deps, c);

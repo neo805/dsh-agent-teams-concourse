@@ -7,42 +7,53 @@
 import { describe, expect, it } from 'vitest';
 import { BudgetBook } from '../../../src/kernel/comms/budget.js';
 
+const key = (from: string, to: string): string => BudgetBook.edgeKey(from, to);
+
 describe('BudgetBook.edgeKey', () => {
-  it('格式为 `${from}->${to}`，有向', () => {
-    expect(BudgetBook.edgeKey('a', 'b')).toBe('a->b');
-    expect(BudgetBook.edgeKey('b', 'a')).toBe('b->a');
+  it('有向且使用无歧义 tuple framing', () => {
+    expect(BudgetBook.edgeKey('a', 'b')).toBe(JSON.stringify(['a', 'b']));
+    expect(BudgetBook.edgeKey('b', 'a')).toBe(JSON.stringify(['b', 'a']));
+    expect(BudgetBook.edgeKey('a->b', 'c')).not.toBe(BudgetBook.edgeKey('a', 'b->c'));
   });
 });
 
 describe('边预算（D1）', () => {
   it('预算内 consume 返回 ok 并扣减余额', () => {
-    const b = new BudgetBook({ edgeBudgets: { 'a->b': 100 } });
+    const b = new BudgetBook({ edgeBudgets: { [key('a', 'b')]: 100 } });
     expect(b.consumeEdge('a', 'b', 40)).toBe('ok');
     expect(b.remainingEdge('a', 'b')).toBe(60);
   });
 
   it('恰好花光预算不熔断，超额才熔断', () => {
-    const b = new BudgetBook({ edgeBudgets: { 'a->b': 50 } });
+    const b = new BudgetBook({ edgeBudgets: { [key('a', 'b')]: 50 } });
     expect(b.consumeEdge('a', 'b', 50)).toBe('ok');
     expect(b.consumeEdge('a', 'b', 1)).toBe('fuse-edge');
   });
 
   it('超额消费触发熔断；熔断后该边一律 fuse-edge', () => {
-    const b = new BudgetBook({ edgeBudgets: { 'a->b': 100 } });
+    const b = new BudgetBook({ edgeBudgets: { [key('a', 'b')]: 100 } });
     expect(b.consumeEdge('a', 'b', 101)).toBe('fuse-edge');
     expect(b.isFusedEdge('a', 'b')).toBe(true);
     expect(b.consumeEdge('a', 'b', 1)).toBe('fuse-edge');
   });
 
   it('边熔断不殃及团队其他边（D1）', () => {
-    const b = new BudgetBook({ edgeBudgets: { 'a->b': 10, 'a->c': 10 } });
+    const b = new BudgetBook({ edgeBudgets: { [key('a', 'b')]: 10, [key('a', 'c')]: 10 } });
     expect(b.consumeEdge('a', 'b', 11)).toBe('fuse-edge');
     expect(b.consumeEdge('a', 'c', 5)).toBe('ok');
     expect(b.isGlobalFused()).toBe(false);
   });
 
+  it('字段边界不碰撞：带箭头的顶点 ID 不串边账', () => {
+    const b = new BudgetBook({
+      edgeBudgets: { [key('a->b', 'c')]: 10, [key('a', 'b->c')]: 20 },
+    });
+    expect(b.remainingEdge('a->b', 'c')).toBe(10);
+    expect(b.remainingEdge('a', 'b->c')).toBe(20);
+  });
+
   it('resumeEdge 人工恢复；未熔断返回 false', () => {
-    const b = new BudgetBook({ edgeBudgets: { 'a->b': 10 } });
+    const b = new BudgetBook({ edgeBudgets: { [key('a', 'b')]: 10 } });
     expect(b.resumeEdge('a', 'b')).toBe(false);
     b.consumeEdge('a', 'b', 11);
     expect(b.resumeEdge('a', 'b')).toBe(true);
@@ -76,7 +87,7 @@ describe('全局预算（D2）', () => {
   });
 
   it('无全局预算时 remainingGlobal 为 undefined，永不全局熔断', () => {
-    const b = new BudgetBook({ edgeBudgets: { 'a->b': 1 } });
+    const b = new BudgetBook({ edgeBudgets: { [key('a', 'b')]: 1 } });
     expect(b.remainingGlobal()).toBeUndefined();
     b.consumeEdge('a', 'b', 1);
     expect(b.consumeEdge('a', 'b', 1)).toBe('fuse-edge'); // 只触发边熔断
@@ -85,12 +96,15 @@ describe('全局预算（D2）', () => {
 
 describe('只读预检与运行时重建', () => {
   it('canConsume 不改变账目；withEdgeBudgets 保留已用边与全局熔断状态', () => {
-    const b = new BudgetBook({ edgeBudgets: { 'a->b': 10, 'a->c': 5 }, globalBudget: 100 });
+    const b = new BudgetBook({
+      edgeBudgets: { [key('a', 'b')]: 10, [key('a', 'c')]: 5 },
+      globalBudget: 100,
+    });
     expect(b.canConsume('a', 'b', 11)).toBe('fuse-edge');
     expect(b.remainingEdge('a', 'b')).toBe(10);
     b.consumeEdge('a', 'b', 4);
     b.consumeEdge('a', 'c', 2);
-    const next = b.withEdgeBudgets({ 'a->b': 10, 'b->c': 7 });
+    const next = b.withEdgeBudgets({ [key('a', 'b')]: 10, [key('b', 'c')]: 7 });
     expect(next.remainingEdge('a', 'b')).toBe(6);
     expect(next.remainingEdge('b', 'c')).toBe(7);
     expect(next.remainingEdge('a', 'c')).toBeUndefined();
@@ -99,11 +113,11 @@ describe('只读预检与运行时重建', () => {
   });
 
   it('预检覆盖全局熔断/边熔断/全局超额分支', () => {
-    const b = new BudgetBook({ edgeBudgets: { 'a->b': 5 }, globalBudget: 2 });
+    const b = new BudgetBook({ edgeBudgets: { [key('a', 'b')]: 5 }, globalBudget: 2 });
     expect(b.canConsume('a', 'b', 3)).toBe('fuse-global');
     b.consumeEdge('x', 'y', 3);
     expect(b.canConsume('a', 'b', 1)).toBe('fuse-global');
-    const edge = new BudgetBook({ edgeBudgets: { 'a->b': 1 } });
+    const edge = new BudgetBook({ edgeBudgets: { [key('a', 'b')]: 1 } });
     edge.consumeEdge('a', 'b', 2);
     expect(edge.canConsume('a', 'b', 1)).toBe('fuse-edge');
   });

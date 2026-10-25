@@ -22,6 +22,8 @@ export interface ConcourseRuntime {
   readonly budget: BudgetBook;
   /** 已由 team_send 提交、等待 pre-step 消费的准入票据。 */
   readonly admissions: Map<string, 'deliver' | 'degrade'>;
+  /** 运行时时钟：准入预检与提交共用同一时间读数。 */
+  readonly now: () => number;
 }
 
 /** 由 concourse 定义构建通信运行时（边预算/全局预算/速率声明接线）。 */
@@ -38,7 +40,7 @@ export function createRuntime(concourse: Concourse, deps: { now?: () => number }
     edgeBudgets,
     ...(concourse.budget?.tokens !== undefined ? { globalBudget: concourse.budget.tokens } : {}),
   });
-  return { concourse, dedup: new DedupStore(), rate, budget, admissions: new Map() };
+  return { concourse, dedup: new DedupStore(), rate, budget, admissions: new Map(), now };
 }
 
 /** 入站消息（与发送方解耦：不含任何可信路由元信息）。 */
@@ -75,6 +77,8 @@ export interface AdmissionPlan {
   readonly wake?: Wake;
   readonly tokens: number;
   readonly key: string;
+  /** 预检时刻；提交必须沿用它记录限流窗口，不能重新翻转 verdict。 */
+  readonly at: number;
 }
 
 export interface AdmitDeps {
@@ -90,24 +94,33 @@ export function estimateMessageTokens(content: string): number {
   return Math.max(1, Math.ceil(content.length / 4));
 }
 
-function rejectPlan(reason: RejectReason, candidates?: readonly string[]): AdmissionPlan {
+function rejectPlan(
+  reason: RejectReason,
+  candidates: readonly string[] | undefined,
+  at: number,
+  tokens = 0,
+  key = '',
+): AdmissionPlan {
   return {
     verdict: 'reject',
     reason,
     ...(candidates !== undefined ? { candidates } : {}),
-    tokens: 0,
-    key: '',
+    tokens,
+    key,
+    at,
   };
 }
 
 /** 只读准入预检：不写台账、不扣预算、不消耗去重/速率窗口。 */
 export function evaluateInbound(rt: ConcourseRuntime, msg: InboundMessage): AdmissionPlan {
+  // 一次预检只读一次时钟；commit 沿用 plan.at，避免窗口边界翻转已执行的 verdict。
+  const at = rt.now();
   const gate = admit(rt.concourse.edges, { from: msg.from, to: msg.to });
-  if (gate.verdict === 'reject') return rejectPlan('EDGE_CLOSED', gate.candidates);
+  if (gate.verdict === 'reject') return rejectPlan('EDGE_CLOSED', gate.candidates, at);
   const edge = gate.edge;
 
   const hop = checkHop(msg.hops ?? 1, edge);
-  if (hop.verdict === 'record-only') return rejectPlan('HOP_LIMIT');
+  if (hop.verdict === 'record-only') return rejectPlan('HOP_LIMIT', undefined, at);
 
   const key = dedupKey({
     from: msg.from,
@@ -115,14 +128,14 @@ export function evaluateInbound(rt: ConcourseRuntime, msg: InboundMessage): Admi
     ...(msg.correlationId !== undefined ? { correlationId: msg.correlationId } : {}),
     content: msg.content,
   });
-  if (rt.dedup.has(key)) return rejectPlan('DUPLICATE');
+  if (rt.dedup.has(key)) return rejectPlan('DUPLICATE', undefined, at);
 
   const limiter = rt.rate.get(BudgetBook.edgeKey(msg.from, msg.to));
-  const degraded = limiter?.wouldDegrade() === true;
+  const degraded = limiter?.wouldDegrade(at) === true;
   const tokens = estimateMessageTokens(msg.content);
   const budget = rt.budget.canConsume(msg.from, msg.to, tokens);
-  if (budget === 'fuse-edge') return rejectPlan('FUSE_EDGE');
-  if (budget === 'fuse-global') return rejectPlan('FUSE_GLOBAL');
+  if (budget === 'fuse-edge') return rejectPlan('FUSE_EDGE', undefined, at, tokens, key);
+  if (budget === 'fuse-global') return rejectPlan('FUSE_GLOBAL', undefined, at, tokens, key);
 
   return {
     verdict: degraded ? 'degrade' : 'deliver',
@@ -131,6 +144,7 @@ export function evaluateInbound(rt: ConcourseRuntime, msg: InboundMessage): Admi
     wake: edge.mode === 'board' ? 'never' : edge.wake,
     tokens,
     key,
+    at,
   };
 }
 
@@ -170,7 +184,7 @@ export function commitInbound(
     const reason = plan.reason ?? 'EDGE_CLOSED';
     if (reason === 'FUSE_EDGE' || reason === 'FUSE_GLOBAL') {
       // 预检只读；提交拒绝时执行一次真实 consume 以落下熔断标记并留预算痕。
-      const consumed = rt.budget.consumeEdge(msg.from, msg.to, estimateMessageTokens(msg.content));
+      const consumed = rt.budget.consumeEdge(msg.from, msg.to, plan.tokens);
       ledger?.append({
         concourseId: rt.concourse.id,
         kind: 'budget',
@@ -178,7 +192,7 @@ export function commitInbound(
         detail: {
           from: msg.from,
           to: msg.to,
-          tokens: estimateMessageTokens(msg.content),
+          tokens: plan.tokens,
           result: consumed,
         },
       });
@@ -188,16 +202,10 @@ export function commitInbound(
   const key = plan.key;
   rt.dedup.record(key);
   const limiter = rt.rate.get(BudgetBook.edgeKey(msg.from, msg.to));
-  const rate = limiter?.check() ?? 'allow';
-  if (rate === 'degrade') {
-    ledger?.append({
-      concourseId: rt.concourse.id,
-      kind: 'comm',
-      action: 'degrade',
-      detail: { from: msg.from, to: msg.to, reason: 'RATE_LIMIT' },
-    });
-    return { kind: 'degrade', reason: 'RATE_LIMIT' };
-  }
+  // 只记录预检时刻的窗口；实际唤醒/结果已经由 plan.verdict 决定，不能事后翻转。
+  limiter?.check(plan.at);
+
+  // deliver 与 degrade 都是真实投递：共用同一段预算提交，恰好扣账一次。
   const consumed = rt.budget.consumeEdge(msg.from, msg.to, plan.tokens);
   ledger?.append({
     concourseId: rt.concourse.id,
@@ -207,6 +215,15 @@ export function commitInbound(
   });
   if (consumed === 'fuse-edge') return commitReject(rt, msg, 'FUSE_EDGE', undefined, ledger);
   if (consumed === 'fuse-global') return commitReject(rt, msg, 'FUSE_GLOBAL', undefined, ledger);
+  if (plan.verdict === 'degrade') {
+    ledger?.append({
+      concourseId: rt.concourse.id,
+      kind: 'comm',
+      action: 'degrade',
+      detail: { from: msg.from, to: msg.to, reason: 'RATE_LIMIT' },
+    });
+    return { kind: 'degrade', reason: 'RATE_LIMIT' };
+  }
   const mode = plan.mode ?? 'notify';
   const wake: Wake = mode === 'board' ? 'never' : (plan.wake ?? 'never');
   ledger?.append({

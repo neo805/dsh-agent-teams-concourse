@@ -32,7 +32,7 @@ export function createTeamLinkTool(deps: TeamToolsDeps) {
           action: { type: 'string' },
           from: { type: 'string' },
           to: { type: 'string' },
-          openEdges: { type: 'integer', required: true },
+          openEdges: { type: 'integer' },
           code: { type: 'string' },
           message: { type: 'string' },
         },
@@ -73,9 +73,8 @@ export function createTeamLinkTool(deps: TeamToolsDeps) {
         if (err instanceof ConcourseError) {
           return {
             ok: false,
-            code: err.code === 'ILLEGAL_TRANSITION' ? 'ILLEGAL_STATE' : err.code,
+            code: err.code,
             message: err.message,
-            openEdges: 0,
           };
         }
         throw err;

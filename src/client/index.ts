@@ -1,12 +1,14 @@
 /**
- * client/index — 客户端入口（浏览器侧独立 bundle，dist/client/index.js）。
+ * client/index — 客户端入口（浏览器侧独立 bundle，dist/client/index.cjs）。
  *
  * 注册右侧面板（调研结论见 BRIDGE.md，两阶段）：
- *   1. ctx.sidebarRightTabs.register(definition)：页型静态定义（kind=concourse）；
+ *   1. ctx.sidebarRightTabs.register(definition)：页型静态定义（kind=concourse），
+ *      由 ctx.effect 托管 disposer；
  *   2. ctx.slots.inject('sidebar.right.pane.tab', () => ctx.slots.register({...}, Component))：
- *      keyed/session 面板体，按定义 id 派发。
+ *      keyed/session 面板体，按页型定义 id 作为 slot key 派发。
  *
- * 纪律：防御式装配——宿主服务缺席或注册抛错一律吞掉（NFR-2：客户端异常永不阻断宿主）。
+ * 纪律：防御式装配——宿主服务缺席时跳过；注册抛错不阻断宿主其它插件，
+ * 但必须留下 warning，不能把契约漂移静默吞掉（NFR-2 + 可诊断性）。
  *
  * TODO(P7 数据桥)：面板体暂用空视图占位。宿主侧把 ConcourseService 快照登记为
  * 'concourse' 会话投影后，面板体改为从 ctx.sessions 投影读取并转配成
@@ -52,30 +54,55 @@ interface ClientCtxLike {
         register?(definition: unknown, component: unknown): unknown;
       }
     | undefined;
+  /** cordis effect：接收注册函数并返回其 disposer（随 caller ctx 卸载）。 */
+  effect?(register: () => unknown): unknown;
+  logger?: { warn?(message: string): void } | undefined;
 }
 
 export function apply(ctx?: unknown): void {
   const c = (ctx ?? {}) as ClientCtxLike;
-  // 阶段 1：页型定义（静态：kind / 标题）
+  const warn = (step: string, err: unknown): void => {
+    try {
+      c.logger?.warn?.(
+        `[concourse] 客户端 ${step} 注册失败（已降级，不阻断宿主）：${err instanceof Error ? err.message : String(err)}`,
+      );
+    } catch {
+      // logger 自身失败也绝不外抛
+    }
+  };
+
+  // 阶段 1：页型定义。服务缺席时整体跳过，避免制造半注册。
+  const tabs = c.sidebarRightTabs;
+  if (tabs?.register === undefined) return;
   try {
-    c.sidebarRightTabs?.register?.({
-      id: TAB_DEFINITION_ID,
-      kind: TAB_KIND,
-      title: () => 'Concourse',
-      priority: 'extension',
-    });
-  } catch {
-    // 注册失败不阻断：面板缺席优于宿主崩溃
+    const registerTab = (): unknown =>
+      tabs.register?.({
+        id: TAB_DEFINITION_ID,
+        kind: TAB_KIND,
+        title: () => 'Concourse',
+        priority: 'extension',
+      });
+    if (typeof c.effect === 'function') c.effect(registerTab);
+    else registerTab();
+  } catch (err) {
+    warn('页型', err);
+    return;
   }
-  // 阶段 2：keyed 面板体
+
+  // 阶段 2：keyed 面板体。当前宿主契约必填 key（不是页型定义的 id 字段）。
   try {
-    c.slots?.inject?.('sidebar.right.pane.tab', () =>
-      c.slots?.register?.(
-        { name: 'sidebar.right.pane.tab', id: TAB_DEFINITION_ID },
-        ConcoursePanelEntry,
-      ),
-    );
-  } catch {
-    // 同上：静默降级
+    c.slots?.inject?.('sidebar.right.pane.tab', () => {
+      try {
+        return c.slots?.register?.(
+          { name: 'sidebar.right.pane.tab', key: TAB_DEFINITION_ID },
+          ConcoursePanelEntry,
+        );
+      } catch (err) {
+        warn('面板体', err);
+        return () => undefined;
+      }
+    });
+  } catch (err) {
+    warn('面板体', err);
   }
 }

@@ -44,7 +44,6 @@ export interface ToolsFixture {
 export function makeFixture(opts: { withCatalog?: boolean } = {}): ToolsFixture {
   const substrate = new StubSubstrate();
   const ledger = new Ledger();
-  const service = new ConcourseService({ substrate, ledger });
   const catalog =
     opts.withCatalog === true
       ? createCatalog({
@@ -61,10 +60,14 @@ export function makeFixture(opts: { withCatalog?: boolean } = {}): ToolsFixture 
           }),
         })
       : undefined;
+  const service = new ConcourseService({
+    substrate,
+    ledger,
+    ...(catalog !== undefined ? { catalog } : {}),
+  });
   const deps: TeamToolsDeps = {
     service,
     ledger,
-    substrate,
     ...(catalog !== undefined ? { catalog } : {}),
   };
   return { deps, service, ledger, substrate };

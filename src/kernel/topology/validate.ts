@@ -4,14 +4,13 @@
  * 计划期权威校验（FR-2.6）：所有问题一次性返回，不 throw；
  * 空数组 = 通过。message 中文面向用户，path 给出定位。
  */
+import { directedPairKey } from '../keys.js';
+import type { SchemaIssue } from './issues.js';
 import type { Concourse, Vertex } from './schema.js';
 import { classify } from './tier.js';
 
-export interface ValidationIssue {
-  code: string;
-  message: string;
-  path?: string;
-}
+/** 语义校验沿用 kernel 的唯一 issue 形态。 */
+export type ValidationIssue = SchemaIssue;
 
 export interface CapacityLimits {
   maxVertices: number;
@@ -56,7 +55,7 @@ export function validateConcourse(
     if (e.from === e.to) {
       push('SELF_LOOP', `边 ${e.from}→${e.to} 是自环，无意义`, `edges[${i}]`);
     }
-    const key = `${e.from}→${e.to}`;
+    const key = directedPairKey(e.from, e.to);
     if (seenEdges.has(key)) {
       push('DUPLICATE_EDGE', `边 ${key} 重复声明`, `edges[${i}]`);
     } else {
@@ -156,8 +155,15 @@ export function validateConcourse(
     push('ROOT_COUNT_MISMATCH', `tier ${c.tier} 要求恰好 1 个根顶点，实际 ${roots.length} 个`, 'vertices');
   }
 
-  // ── 任务：assignee / 依赖 / 依赖环 ──
-  const taskById = new Map(c.tasks.map((t) => [t.id, t]));
+  // ── 任务：id 唯一 / assignee / 依赖 / 依赖环 ──
+  const taskById = new Map<string, (typeof c.tasks)[number]>();
+  c.tasks.forEach((t, i) => {
+    if (taskById.has(t.id)) {
+      push('DUPLICATE_TASK_ID', `任务 id「${t.id}」重复出现`, `tasks[${i}].id`);
+    } else {
+      taskById.set(t.id, t);
+    }
+  });
   c.tasks.forEach((t, i) => {
     if (!byId.has(t.assignee)) {
       push('DANGLING_ASSIGNEE', `任务「${t.id}」的 assignee「${t.assignee}」不存在于顶点集`, `tasks[${i}].assignee`);

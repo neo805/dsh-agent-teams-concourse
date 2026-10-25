@@ -120,6 +120,81 @@ describe('replay：纯函数重建状态', () => {
   });
 });
 
+describe('改边后的预算回放等价', () => {
+  it('预算边 close/open 后 live 与 replay 的 remaining/fuse/后续 consume 完全一致', async () => {
+    const store = createMemoryStore();
+    const { service, ledger, substrate } = makeWiredService(store);
+    service.create({
+      id: 'c-edge-budget',
+      tier: 'T1a',
+      budget: { tokens: 200 },
+      vertices: [
+        { id: 'a', origin: 'self' },
+        { id: 'b', parent: 'a', layer: 1 },
+      ],
+      edges: [{ from: 'a', to: 'b', budget: { tokens: 40 } }],
+    });
+    service.submit('c-edge-budget');
+    await service.approve('c-edge-budget', { id: 'root' });
+
+    const first = service.send(
+      'c-edge-budget',
+      { from: 'a', to: 'b', content: '12345678' }, // 2 tokens
+      { id: 'root' },
+    );
+    expect(first.outcome).toBe('deliver');
+    expect(service.runtime('c-edge-budget').budget.remainingEdge('a', 'b')).toBe(38);
+
+    service.link('c-edge-budget', { from: 'a', to: 'b', action: 'close' });
+    service.link('c-edge-budget', { from: 'a', to: 'b', action: 'open' });
+    expect(service.runtime('c-edge-budget').budget.remainingEdge('a', 'b')).toBeUndefined();
+
+    // 40 tokens：live 重开后该边无预算，只能走全局账；replay 若保留旧边预算会误判 FUSE_EDGE。
+    const second = service.send(
+      'c-edge-budget',
+      { from: 'a', to: 'b', content: 'x'.repeat(160) },
+      { id: 'root' },
+    );
+    expect(second.outcome).toBe('deliver');
+    expect(service.runtime('c-edge-budget').budget.remainingGlobal()).toBe(158);
+
+    const state = replay(store.load());
+    const revived = new ConcourseService({
+      substrate,
+      ledger: new Ledger({ snapshot: store.load() }),
+      now: fakeClock(),
+      snapshot: state,
+    });
+    const liveBudget = service.runtime('c-edge-budget').budget;
+    const replayBudget = revived.runtime('c-edge-budget').budget;
+    expect({
+      edge: replayBudget.remainingEdge('a', 'b'),
+      global: replayBudget.remainingGlobal(),
+      fused: replayBudget.isFusedEdge('a', 'b'),
+    }).toEqual({
+      edge: liveBudget.remainingEdge('a', 'b'),
+      global: liveBudget.remainingGlobal(),
+      fused: liveBudget.isFusedEdge('a', 'b'),
+    });
+    expect(replayBudget.remainingGlobal()).toBe(158);
+    expect(ledger.query({ kind: 'budget', action: 'consume' })).toHaveLength(2);
+  });
+
+  it('createdAt 跨 replay 保持 create 事件的时刻', () => {
+    const store = createMemoryStore();
+    const { service } = makeWiredService(store);
+    const created = service.create(t1aInput());
+    expect(created.createdAt).toBe(1000);
+    const revived = new ConcourseService({
+      substrate: new StubSubstrate(),
+      ledger: new Ledger({ snapshot: store.load() }),
+      now: fakeClock(),
+      snapshot: replay(store.load()),
+    });
+    expect(revived.get('c-persist').createdAt).toBe(created.createdAt);
+  });
+});
+
 describe('模拟重启后续跑', () => {
   const dirs: string[] = [];
   afterEach(() => {

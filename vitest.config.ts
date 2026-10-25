@@ -6,7 +6,7 @@ export default defineConfig({
     coverage: {
       provider: 'v8',
       include: ['src/**/*.ts', 'src/**/*.tsx'],
-      // P0 全局阈值；P1 起切换为按层阈值（kernel ≥90 / service ≥80 / host ≥70 / client ≥60）。
+      // 当前全局四项 90；按层阈值是技术债 T-9，留到 P9 启用。
       thresholds: {
         lines: 90,
         branches: 90,

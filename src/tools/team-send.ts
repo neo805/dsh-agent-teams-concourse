@@ -21,7 +21,7 @@ export function createTeamSendTool(deps: TeamToolsDeps) {
       to: { type: 'string', required: true, description: '接收方顶点 id' },
       content: { type: 'string', required: true, description: '消息正文' },
       correlationId: { type: 'string', description: '关联 id（应答链追去重用）' },
-      hops: { type: 'integer', description: '已跳数（中继转发时递增；缺省 0）' },
+      hops: { type: 'integer', description: '已跳数（中继转发时递增；缺省按第 1 跳）' },
     },
     output: {
       schema: {

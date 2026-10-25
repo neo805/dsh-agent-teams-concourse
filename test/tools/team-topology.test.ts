@@ -36,7 +36,8 @@ describe('team_topology', () => {
       provider: 'p1',
       model: 'm-big',
       reasoningEffort: 'low',
-      tokenTier: 'cheap',
+      // 宿主 catalog 不提供 tier，实际模型按 balanced 计；目标 cheap 只留在 rationale。
+      tokenTier: 'balanced',
     });
     // 纯预览：不落库
     expect(fx.service.list()).toHaveLength(0);

@@ -25,17 +25,19 @@ function parseRoot() {
   return resolve(i >= 0 && argv[i + 1] ? argv[i + 1] : cwd());
 }
 
-/** @returns {string[]} 命中的违规清单（人类可读）。 */
+/**
+ * 同时扫描源码与实际发布目录 dist（含图片文件与文本中的 emoji）。
+ * @returns {string[]} 命中的违规清单（人类可读）。
+ */
 export function scan(root) {
-  const srcDir = join(root, 'src');
   const violations = [];
-  let stat;
-  try {
-    stat = statSync(srcDir);
-  } catch {
-    return violations; // 没有 src/ 视为无资产（P0 之前的形态也算通过）
-  }
-  if (!stat.isDirectory()) return violations;
+  const roots = [join(root, 'src'), join(root, 'dist')].filter((dir) => {
+    try {
+      return statSync(dir).isDirectory();
+    } catch {
+      return false;
+    }
+  });
 
   /** @param {string} dir */
   function walk(dir) {
@@ -62,7 +64,8 @@ export function scan(root) {
       }
     }
   }
-  walk(srcDir);
+
+  for (const dir of roots) walk(dir);
   return violations;
 }
 

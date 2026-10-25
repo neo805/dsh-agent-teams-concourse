@@ -9,7 +9,7 @@
  *     工具面收口改由 substrate 在挂载后调 ctx.tools.restrict 完成）；
  *   · start（one-shot）直接抛 ProviderError(code='CONTINUABLE_ONLY')；
  *   · prepareContinuable 只贡献 spawn seed —— MVP 仅 spawn 语义（全新子代理，
- *     无父历史 seed）；fork（带父 seed）推迟到 P5。
+ *     无父历史 seed）；fork（带父 seed）推迟到 P7。
  *
  * provider 对象形态镜像 dsh-subagent SubagentProvider（结构性子集），
  * 由插件入口经 ctx.subagents.registerProvider 注册（本层是库，不含入口）。
@@ -61,7 +61,7 @@ export interface ConcourseProvider {
 }
 
 export interface ConcourseProviderDeps {
-  /** 预留：P5 fork 语义需要读父历史时注入；MVP 不使用。 */
+  /** 预留：P7 fork 语义需要读父历史时注入；MVP 不使用。 */
 }
 
 export function createConcourseProvider(_deps: ConcourseProviderDeps): ConcourseProvider {

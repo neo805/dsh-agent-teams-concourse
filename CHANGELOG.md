@@ -3,6 +3,40 @@
 本项目遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/) 与
 [语义化版本](https://semver.org/lang/zh-CN/)。版本变更须在此登记。
 
+## [0.2.1-rc.3] — 2026-10-25 · 契约、通信与回放一致性硬化
+
+### Added
+
+- 客户端面板 keyed slot 使用当前宿主契约的 `key`，页型注册接入 `ctx.effect`；注册失败输出 warning 而不是静默消失。
+- 共享预算规范化纯函数：`team_topology` 与 `team_plan/create` 对预算回填/溢出给出一致结论。
+- `approve` 在写 intent、拉起任何顶点之前，对全部显式 model/effort 做 Catalog 白名单预检。
+- 边界门禁正向白名单与 `index` 层；corpus 原始比例门禁与陈旧 `dist` 拒绝；pack 实物文件契约；资产门禁覆盖 `dist`。
+
+### Changed
+
+- Substrate 的 parent/activation 表改用全局唯一 `childId`；dispose 成功后才移除句柄，失败可重试。
+- 速率降级的真实投递也恰好扣一次预算；准入预检与提交共用同一时间戳，不再事后翻转 wakeup/verdict。
+- 改边只重建新增或配置变化的 rate limiter，未变边的滑动窗口继续有效。
+- live/replay 共用“拓扑 + edgeBudgets + withEdgeBudgets”reducer；`createdAt` 跨重启恢复。
+- `requestedVsEffective` 按 `(concourseId, vertexId)` 查询；Ledger 用派生索引提供 echo/RVE。
+- 启动只读取一次事件存储；JSONL 目录只确保一次；移除重复 `order` 数组与工具层未使用的 substrate 依赖。
+- kernel 复合键统一 JSON tuple framing；特殊字符串 ID/effort 不读原型链；task id 增加唯一性校验；suggest/预算共用 effort 归一化；英文关键词按词边界匹配。
+- `tsdown` 迁移到 `deps.neverBundle`；移除无引用的 `schemastery` 与 `dsh-agent-loop-testkit` 依赖。
+
+### Fixed
+
+- 多 concourse 复用同名顶点时的跨团队误 dispose。
+- degraded 消息绕过预算、窗口边界 verdict 反转、改边清空限流窗口。
+- close/open 预算边在重启前后熔断结果不同。
+- `team_link` 失败伪造 `openEdges:0` 并改写领域错误码。
+- 客户端 keyed slot 因 `id`/`key` 混淆而不注册。
+- 特殊 ID 引发预算字符串拼接/NaN、glyph 渲染崩溃，以及复合键碰撞。
+
+### Known limits
+
+- 审批中断的完整恢复、post-delivery 写盘失败、dedup/admission 重启回放、`team_plan` 部分成功与 torn-tail 策略仍未实现；登记于开发计划 §9，需另立事务/恢复协议。本轮不宣称 exactly-once 或完整崩溃恢复。
+- Web 核心链路已在 `conc03` scratch profile 实机验证；Desktop profile 已安装 rc.3 并启用配置，但需重启后由出品人验收 Concourse tab 的真实视觉与交互。客户端 slot 已由严格契约测试、pack-smoke 与当前 slot 契约 Inspect 覆盖。
+
 ## [0.2.1-rc.2] — 2026-10-25 · 通信与状态可信性
 
 ### Added

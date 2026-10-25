@@ -5,7 +5,7 @@
  * 实现在 substrate.ts / catalog.ts / provider.ts；service 层只准依赖本文件的类型。
  */
 
-/** 单个顶点的拉起规格（路线 A：经 ctx.subagents.startContinuable）。 */
+/** 单个顶点的拉起规格（路线 A：经 ctx.subagents.startActivation）。 */
 export interface VertexStart {
   /** concourse 内的顶点 id（账本/边引用用）。 */
   readonly vertexId: string;
@@ -36,7 +36,7 @@ export interface VertexHandle {
 /** 拉起失败 typed error：code 供台账与 UI 分类。 */
 export type SubstrateErrorCode =
   | 'DEGRADED' // 降级模式：ctx.subagents 缺席
-  | 'START_FAILED' // startContinuable 抛错（含模型 fail-loud）
+  | 'START_FAILED' // startActivation 抛错（含模型 fail-loud）
   | 'SEND_FAILED'
   | 'TARGET_UNAVAILABLE'
   | 'INTERRUPT_FAILED';

@@ -4,10 +4,12 @@
  * 设计口径：
  *  · append-only 内存结构；seq/at 由台账统一盖章（时钟注入，测试确定性）；
  *  · 可选注入 sink：每事件回调，persistence 层借此接线落盘（台账是事件源）；
- *  · echoCounts 四指标：投递数 / 拒收数 / 降级数 / 熔断数（按 concourseId 聚合）；
+ *  · echoCounts 四指标：投递数 / 拒收数 / 降级数 / 熔断数（按 concourseId 增量聚合）；
  *  · requestedVsEffective：顶点拉起时的请求档位与生效档位对照——
  *    requested=null ↔ effective='inherit'，inherit_ratio=100% 时亦可辨。
  */
+import { encodeTuple } from '../kernel/keys.js';
+
 export type LedgerKind = 'lifecycle' | 'comm' | 'budget';
 
 /** 台账事件（append-only；seq 单调递增，at 为注入时钟读数）。 */
@@ -57,17 +59,29 @@ export interface LedgerOptions {
   readonly snapshot?: readonly LedgerEvent[];
 }
 
+interface MutableEcho {
+  delivered: number;
+  rejected: number;
+  degraded: number;
+  fused: number;
+}
+
 export class Ledger {
   private readonly events: LedgerEvent[];
   private readonly now: () => number;
   private readonly sink: LedgerSink | undefined;
   private seq: number;
+  /** 派生投影：事件仍是唯一权威，索引只加速状态查询。 */
+  private readonly echoByConcourse = new Map<string, MutableEcho>();
+  private readonly echoAll: MutableEcho = { delivered: 0, rejected: 0, degraded: 0, fused: 0 };
+  private readonly latestVertexStart = new Map<string, RequestedVsEffective>();
 
   constructor(opts: LedgerOptions = {}) {
     this.now = opts.now ?? (() => Date.now());
     this.sink = opts.sink;
     this.events = [...structuredClone(opts.snapshot ?? [])];
     this.seq = this.events.reduce((max, event) => Math.max(max, event.seq), 0);
+    for (const event of this.events) this.indexDerived(event);
   }
 
   /**
@@ -84,6 +98,7 @@ export class Ledger {
     this.sink?.(event);
     this.events.push(event);
     this.seq = nextSeq;
+    this.indexDerived(event);
     return event;
   }
 
@@ -105,20 +120,14 @@ export class Ledger {
   }
 
   /**
-   * 顶点拉起时的请求档位 vs 生效档位对照（取该顶点最近一次 vertex-start 事件）。
-   * 未拉起过的顶点返回 undefined。
+   * 顶点拉起时的请求档位 vs 生效档位对照（按 concourseId + vertexId 取最近一次）。
+   * vertexId 只在单个 concourse 内唯一；未拉起过的顶点返回 undefined。
    */
-  requestedVsEffective(vertexId: string): RequestedVsEffective | undefined {
-    for (let i = this.events.length - 1; i >= 0; i -= 1) {
-      const e = this.events[i];
-      if (e === undefined || e.action !== 'vertex-start') continue;
-      if (e.detail['vertexId'] !== vertexId) continue;
-      return {
-        requested: e.detail['requested'] as RequestedVsEffective['requested'],
-        effective: e.detail['effective'] as RequestedVsEffective['effective'],
-      };
-    }
-    return undefined;
+  requestedVsEffective(
+    concourseId: string,
+    vertexId: string,
+  ): RequestedVsEffective | undefined {
+    return this.latestVertexStart.get(encodeTuple([concourseId, vertexId]));
   }
 
   /**
@@ -127,20 +136,55 @@ export class Ledger {
    * 不传 concourseId 时全量聚合。
    */
   echoCounts(concourseId?: string): EchoCounts {
-    let delivered = 0;
-    let rejected = 0;
-    let degraded = 0;
-    let fused = 0;
-    for (const e of this.events) {
-      if (e.kind !== 'comm') continue;
-      if (concourseId !== undefined && e.concourseId !== concourseId) continue;
-      if (e.action === 'deliver') delivered += 1;
-      else if (e.action === 'reject') {
-        rejected += 1;
-        const reason = e.detail['reason'];
-        if (reason === 'FUSE_EDGE' || reason === 'FUSE_GLOBAL') fused += 1;
-      } else if (e.action === 'degrade') degraded += 1;
+    const counts =
+      concourseId === undefined ? this.echoAll : this.echoByConcourse.get(concourseId);
+    if (counts === undefined) return { delivered: 0, rejected: 0, degraded: 0, fused: 0 };
+    return {
+      delivered: counts.delivered,
+      rejected: counts.rejected,
+      degraded: counts.degraded,
+      fused: counts.fused,
+    };
+  }
+
+  /** 维护派生投影；只在 append/构造快照时执行，查询不再扫全事件。 */
+  private indexDerived(e: LedgerEvent): void {
+    if (e.kind === 'lifecycle' && e.action === 'vertex-start') {
+      const vertexId = e.detail['vertexId'];
+      if (typeof vertexId === 'string') {
+        this.latestVertexStart.set(encodeTuple([e.concourseId, vertexId]), {
+          requested: e.detail['requested'] as RequestedVsEffective['requested'],
+          effective: e.detail['effective'] as RequestedVsEffective['effective'],
+        });
+      }
+      return;
     }
-    return { delivered, rejected, degraded, fused };
+    if (e.kind !== 'comm') return;
+
+    const byConcourse = this.getEcho(e.concourseId);
+    if (e.action === 'deliver') {
+      byConcourse.delivered += 1;
+      this.echoAll.delivered += 1;
+    } else if (e.action === 'reject') {
+      byConcourse.rejected += 1;
+      this.echoAll.rejected += 1;
+      const reason = e.detail['reason'];
+      if (reason === 'FUSE_EDGE' || reason === 'FUSE_GLOBAL') {
+        byConcourse.fused += 1;
+        this.echoAll.fused += 1;
+      }
+    } else if (e.action === 'degrade') {
+      byConcourse.degraded += 1;
+      this.echoAll.degraded += 1;
+    }
+  }
+
+  private getEcho(concourseId: string): MutableEcho {
+    let counts = this.echoByConcourse.get(concourseId);
+    if (counts === undefined) {
+      counts = { delivered: 0, rejected: 0, degraded: 0, fused: 0 };
+      this.echoByConcourse.set(concourseId, counts);
+    }
+    return counts;
   }
 }

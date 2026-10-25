@@ -4,7 +4,7 @@
  * 五段齐全：拓扑建议（含依据）· 任务表（含依据列与总预算）· 通信边表（含关闭边计数）·
  * 审批策略 · 风险（无风险显式写「无」）。头部操作：批准并运行 / 改 / 弃。
  */
-import type { PlanView, TierOption } from './types.js';
+import type { PlanEdgeRow, PlanView, TierOption } from './types.js';
 
 export interface PlanCardProps {
   readonly plan: PlanView;
@@ -12,6 +12,13 @@ export interface PlanCardProps {
   readonly onRevise?: () => void;
   readonly onDiscard?: () => void;
 }
+
+/** 唤醒三态的中文视图（审批信息必须能区分 on-reply 与 never）。 */
+const WAKE_LABEL: Record<PlanEdgeRow['wake'], string> = {
+  always: '总是',
+  'on-reply': '仅应答',
+  never: '不唤醒',
+};
 
 /** 谱系选项行：选中 ● / 未选 ○ / 不可用 ─（形状承载选择态，不依赖颜色）。 */
 function TierRow({ option }: { readonly option: TierOption }) {
@@ -112,7 +119,7 @@ export function PlanCard({ plan, onApprove, onRevise, onDiscard }: PlanCardProps
                 <td>{e.kind}</td>
                 <td>≤{e.hopTTL}</td>
                 <td>{e.rate ?? '—'}</td>
-                <td>{e.wake ? '是' : '否'}</td>
+                <td>{WAKE_LABEL[e.wake]}</td>
               </tr>
             ))}
           </tbody>

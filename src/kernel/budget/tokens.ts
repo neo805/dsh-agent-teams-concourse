@@ -10,6 +10,7 @@
  * estimateTaskTokens 是单任务视角，不乘系数；estimateConcourseBudget 按任务 assignee
  * 查顶点 reasoningEffort 乘系数，perVertex 汇总，total 为总和。
  */
+import { normalizeEffort } from '../profile/effort.js';
 import type { Concourse, TaskSpec } from '../topology/schema.js';
 
 const BASE = 8000;
@@ -19,11 +20,11 @@ const TOOL_CALL_UNIT = 2000;
 /** schema 默认画像维度（DifficultyProfile .default 值）。 */
 const DEFAULT_COGNITIVE = 3;
 
-/** reasoningEffort → 成本系数；未知/缺省一律 1（保守口径）。 */
-const EFFORT_FACTOR: Record<string, number> = {
-  low: 0.6,
-  high: 1.8,
-};
+/** 规范 reasoningEffort → 成本系数；未知/缺省一律 1（保守口径）。 */
+const EFFORT_FACTOR: ReadonlyMap<string, number> = new Map([
+  ['low', 0.6],
+  ['high', 1.8],
+]);
 
 /**
  * 单任务 token 估算（单任务视角，不乘 effort 系数）。
@@ -49,11 +50,12 @@ export function estimateConcourseBudget(c: Concourse): {
   const effortByVertex = new Map<string, string | undefined>(
     c.vertices.map((v) => [v.id, v.reasoningEffort]),
   );
-  const perVertex: Record<string, number> = {};
+  // 任意合法字符串都可作为 assignee；null-prototype 避免 constructor/__proto__ 读原型链。
+  const perVertex: Record<string, number> = Object.create(null) as Record<string, number>;
   let total = 0;
   for (const task of c.tasks) {
     const effort = effortByVertex.get(task.assignee);
-    const factor = (effort !== undefined ? EFFORT_FACTOR[effort] : undefined) ?? 1;
+    const factor = effort !== undefined ? (EFFORT_FACTOR.get(normalizeEffort(effort)) ?? 1) : 1;
     const est = estimateTaskTokens(task) * factor;
     perVertex[task.assignee] = (perVertex[task.assignee] ?? 0) + est;
     total += est;

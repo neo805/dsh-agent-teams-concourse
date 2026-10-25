@@ -14,9 +14,9 @@
 ## 右侧面板注册（两阶段）
 
 1. `ctx.sidebarRightTabs.register(definition)`（服务名 `sidebarRightTabs`，`SidebarRightTabRegistry`）：
-   静态类型定义 `{ id, kind, title, priority?, guide? }`。`id` 是后续 keyed slot 的派发键。
-2. `ctx.slots.inject('sidebar.right.pane.tab', () => ctx.slots.register({ name: 'sidebar.right.pane.tab', id, ... }, Component))`：
-   keyed/session 作用域，按定义 `id` 派发；组件经 `inject.hooks.tabInfo` 拿到标签上下文。
+   静态类型定义 `{ id, kind, title, priority?, guide? }`；disposer 由 `ctx.effect` 托管。
+2. `ctx.slots.inject('sidebar.right.pane.tab', () => ctx.slots.register({ name: 'sidebar.right.pane.tab', key, ... }, Component))`：
+   keyed/session 作用域，**keyed slot 必填 `key`**（值取页型定义的 `id`），不是 `id` 字段；组件经 `inject.hooks.tabInfo` 拿到标签上下文。
    参考插件对 `conversation.session.header.actions` 的用法同款（`slots.inject` 包 `slots.register`）。
 - 反模式（报告 §7.6.4）：`sidebar` / `rightbar` / `root` 为 single 已占用 slot，注册会遮蔽官方 UI，禁止触碰。
 
@@ -33,6 +33,6 @@
 - `src/client/index.ts` 的 `apply(ctx)` 完成面板注册（`sidebarRightTabs` + `sidebar.right.pane.tab`），
   面板体暂用空视图渲染占位。
 - **留 TODO**：宿主侧（`src/index.ts`）尚未把 ConcourseService 快照登记为 `concourse` 会话投影，
-  客户端面板体亦未消费投影；接线在 P5 完成，届时面板从 `ctx.sessions` 投影读取并转为 `ConcourseView`。
+  客户端面板体亦未消费投影；接线在 P7 完成，届时面板从 `ctx.sessions` 投影读取并转为 `ConcourseView`。
   选择理由：投影桥需要宿主侧装配改动 + 运行时验证，超出 P4「最小客户端 UI」范围；
   纯 props 口径下组件可完整 TDD，接线点单一（仅面板体的数据来源）。

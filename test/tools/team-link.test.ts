@@ -5,7 +5,7 @@ import { describe, expect, test } from 'vitest';
 import { admitInbound } from '../../src/service/inbox-gate.js';
 import { createTeamLinkTool } from '../../src/tools/team-link.js';
 import { createTeamSendTool } from '../../src/tools/team-send.js';
-import { ROOT_AGENT_ID, fakeExec, makeFixture, makeRunning } from './helpers.js';
+import { ROOT_AGENT_ID, SAMPLE_SPEC, fakeExec, makeFixture, makeRunning } from './helpers.js';
 
 interface LinkOut {
   ok: boolean;
@@ -13,7 +13,7 @@ interface LinkOut {
   action?: string;
   from?: string;
   to?: string;
-  openEdges: number;
+  openEdges?: number;
   code?: string;
   message?: string;
 }
@@ -36,6 +36,36 @@ describe('team_link', () => {
     // spec 边集同步 + 台账留痕
     expect(fx.service.get('demo').concourse.edges.some((e) => e.from === 'a' && e.to === 'b')).toBe(true);
     expect(fx.ledger.query({ action: 'edge-open' })).toHaveLength(1);
+  });
+
+  test('改任意边不清空未变边的 rate 窗口', async () => {
+    const fx = makeFixture();
+    const spec = {
+      ...SAMPLE_SPEC,
+      edges: SAMPLE_SPEC.edges.map((e) =>
+        e.from === 'lead' && e.to === 'a' ? { ...e, rate: { n: 1, perMs: 60_000 } } : e,
+      ),
+    };
+    await makeRunning(fx, spec);
+    const send = createTeamSendTool(fx.deps);
+    const first = (await send.execute(
+      { id: 'demo', from: 'lead', to: 'a', content: '窗口内第一条' },
+      fakeExec({ id: ROOT_AGENT_ID }),
+    )) as { outcome?: string };
+    expect(first.outcome).toBe('deliver');
+
+    const link = createTeamLinkTool(fx.deps);
+    const opened = (await link.execute(
+      { id: 'demo', from: 'a', to: 'b', action: 'open' },
+      fakeExec(),
+    )) as LinkOut;
+    expect(opened.ok).toBe(true);
+
+    const second = (await send.execute(
+      { id: 'demo', from: 'lead', to: 'a', content: '窗口内第二条' },
+      fakeExec({ id: ROOT_AGENT_ID }),
+    )) as { outcome?: string; reason?: string };
+    expect(second).toMatchObject({ outcome: 'degrade', reason: 'RATE_LIMIT' });
   });
 
   test('request-reply 开边自动绑反向应答边（A2）', async () => {
@@ -87,19 +117,23 @@ describe('team_link', () => {
     const tool = createTeamLinkTool(fx.deps);
     const out = (await tool.execute({ id: 'demo', from: 'lead', to: 'a', action: 'open' }, fakeExec())) as LinkOut;
     expect(out.ok).toBe(false);
-    expect(out.code).toBe('ILLEGAL_STATE');
+    expect(out.code).toBe('ILLEGAL_TRANSITION');
+    expect(out.openEdges).toBeUndefined();
+    expect('openEdges' in out).toBe(false);
   });
 
-  test('未知顶点 / 未知 concourse', async () => {
+  test('未知顶点 / 未知 concourse：错误码保留领域语义，不伪造开放边数', async () => {
     const fx = makeFixture();
     await makeRunning(fx);
     const tool = createTeamLinkTool(fx.deps);
     const bad = (await tool.execute({ id: 'demo', from: 'a', to: 'zz', action: 'open' }, fakeExec())) as LinkOut;
     expect(bad.ok).toBe(false);
     expect(bad.code).toBe('UNKNOWN_VERTEX');
+    expect('openEdges' in bad).toBe(false);
     const missing = (await tool.execute({ id: 'nope', from: 'a', to: 'b', action: 'open' }, fakeExec())) as LinkOut;
     expect(missing.ok).toBe(false);
     expect(missing.code).toBe('NOT_FOUND');
+    expect('openEdges' in missing).toBe(false);
   });
 
   test('action 枚举越界：defineTool 入参校验拦截', async () => {
@@ -114,6 +148,7 @@ describe('team_link', () => {
     const fx = makeFixture();
     const tool = createTeamLinkTool(fx.deps);
     expect(tool.output.schema).toMatchObject({ type: 'object', additionalProperties: false });
+    expect(tool.output.schema.properties?.openEdges?.required).not.toBe(true);
     expect(tool.description).toContain('team_task_*');
   });
 });

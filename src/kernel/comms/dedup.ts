@@ -8,6 +8,7 @@
  * kernel 是纯函数内核：哈希用纯 JS FNV-1a（32 位），禁 node:crypto；
  * DedupStore 是内存计数器，持久化由宿主 service 层负责（kernel 零宿主依赖）。
  */
+import { encodeTuple } from '../keys.js';
 
 /** FNV-1a 32 位哈希（纯 JS 实现），输出 8 位小写 hex。 */
 export function contentDigest(content: string): string {
@@ -20,11 +21,8 @@ export function contentDigest(content: string): string {
   return h.toString(16).padStart(8, '0');
 }
 
-/** 键分隔符：ASCII Unit Separator，避免与正文冲突。 */
-const SEP = '\u001f';
-
 /**
- * 生成稳定去重键：hash(from|to|correlationId?|digest)。
+ * 生成稳定去重键：hash(tuple(from,to,correlationId?,digest))。
  * correlationId 缺省用空串占位——显式空串与缺省等价（文档承诺）。
  */
 export function dedupKey(parts: {
@@ -35,7 +33,7 @@ export function dedupKey(parts: {
 }): string {
   const corr = parts.correlationId ?? '';
   return contentDigest(
-    [parts.from, parts.to, corr, contentDigest(parts.content)].join(SEP),
+    encodeTuple([parts.from, parts.to, corr, contentDigest(parts.content)]),
   );
 }
 

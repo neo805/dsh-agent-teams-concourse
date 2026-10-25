@@ -9,6 +9,7 @@
  * 一切熔断与恢复都应由调用方留痕（E2）；本类只提供纯判定与账目。
  * 无预算登记的边 consume 只记全局账。
  */
+import { directedPairKey } from '../keys.js';
 
 export class BudgetBook {
   /** 各边剩余预算（edgeKey → remaining）。 */
@@ -25,9 +26,9 @@ export class BudgetBook {
     if (opts.globalBudget !== undefined) this.globalRemaining = opts.globalBudget;
   }
 
-  /** 边键：`${from}->${to}`（有向）。 */
+  /** 边键：JSON tuple（有向、字段边界无歧义）。 */
   static edgeKey(from: string, to: string): string {
-    return `${from}->${to}`;
+    return directedPairKey(from, to);
   }
 
   /** 只读判定：当前是否还能在该边消费 tokens（不改变账目）。 */

@@ -51,11 +51,13 @@ export class FakeActivation {
   constructor(
     readonly childId: string,
     private readonly log: FakeDisposeCall[],
-    private readonly fail?: Error,
+    /** 延迟读取故障：允许测试在失败后清除错误并验证同一句柄可重试。 */
+    private readonly failure?: () => Error | undefined,
   ) {}
   async dispose(): Promise<void> {
     this.log.push({ childId: this.childId });
-    if (this.fail !== undefined) throw this.fail;
+    const err = this.failure?.();
+    if (err !== undefined) throw err;
   }
 }
 
@@ -129,7 +131,7 @@ export class FakeSubagents {
     this.startCalls.push({ spec });
     if (this.startError !== undefined) throw this.startError;
     this.childSeq += 1;
-    return new FakeActivation(`child-${this.childSeq}`, this.disposeCalls, this.disposeError);
+    return new FakeActivation(`child-${this.childSeq}`, this.disposeCalls, () => this.disposeError);
   }
 
   async sendMessage(

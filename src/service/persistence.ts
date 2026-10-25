@@ -39,9 +39,13 @@ export function createMemoryStore(): EventStore {
 
 /** JSONL 追加日志存储；path 是台账文件本身，父目录按需创建。 */
 export function createJsonlStore(path: string): EventStore {
+  let directoryReady = false;
   return {
     append(event) {
-      mkdirSync(dirname(path), { recursive: true });
+      if (!directoryReady) {
+        mkdirSync(dirname(path), { recursive: true });
+        directoryReady = true;
+      }
       appendFileSync(path, `${JSON.stringify(event)}\n`, 'utf8');
     },
     load() {
@@ -59,6 +63,8 @@ export function createJsonlStore(path: string): EventStore {
 export interface ReplayConcourse {
   readonly concourse: Concourse;
   readonly status: ConcourseStatus;
+  /** create 事件时刻（重启前后快照等价）。 */
+  readonly createdAt: number;
   readonly handles: readonly VertexHandle[];
   /** 领队/self 顶点的 durable session id；用于重启后的身份映射。 */
   readonly rootSessionId?: string;
@@ -100,13 +106,34 @@ export interface ReplayState {
   readonly concourses: readonly ReplayConcourse[];
 }
 
-function bookFromConcourse(c: Concourse): BudgetBook {
+/** 当前边集声明的边预算（内部键使用 BudgetBook 的统一 framing）。 */
+export function edgeBudgetsOf(c: Concourse): Record<string, number> {
   const edgeBudgets: Record<string, number> = {};
   for (const e of c.edges) {
-    if (e.budget?.tokens !== undefined) edgeBudgets[BudgetBook.edgeKey(e.from, e.to)] = e.budget.tokens;
+    if (e.budget?.tokens !== undefined) {
+      edgeBudgets[BudgetBook.edgeKey(e.from, e.to)] = e.budget.tokens;
+    }
   }
+  return edgeBudgets;
+}
+
+/**
+ * live 改边与 replay 共用的唯一 reducer：先归约拓扑，再按新边集重建边预算表。
+ * 分开实现会让 close/open 后的 remaining/fuse 在重启前后漂移。
+ */
+export function applyEdgeLifecycleWithBudget(
+  concourse: Concourse,
+  budget: BudgetBook,
+  action: string,
+  detail: Readonly<Record<string, unknown>>,
+): { concourse: Concourse; budget: BudgetBook } {
+  const next = applyEdgeLifecycle(concourse, action, detail);
+  return { concourse: next, budget: budget.withEdgeBudgets(edgeBudgetsOf(next)) };
+}
+
+function bookFromConcourse(c: Concourse): BudgetBook {
   return new BudgetBook({
-    edgeBudgets,
+    edgeBudgets: edgeBudgetsOf(c),
     ...(c.budget?.tokens !== undefined ? { globalBudget: c.budget.tokens } : {}),
   });
 }
@@ -120,6 +147,7 @@ export function replay(events: readonly LedgerEvent[]): ReplayState {
   interface Mutable {
     concourse: Concourse;
     status: ConcourseStatus;
+    createdAt: number;
     handles: VertexHandle[];
     rootSessionId?: string;
     budget: BudgetBook;
@@ -133,6 +161,7 @@ export function replay(events: readonly LedgerEvent[]): ReplayState {
       byId.set(e.concourseId, {
         concourse,
         status: 'draft',
+        createdAt: e.at,
         handles: [],
         budget: bookFromConcourse(concourse),
       });
@@ -148,7 +177,9 @@ export function replay(events: readonly LedgerEvent[]): ReplayState {
         cur.handles = [...(e.detail['handles'] as VertexHandle[] | undefined ?? [])];
         if (typeof e.detail['rootSessionId'] === 'string') cur.rootSessionId = e.detail['rootSessionId'];
       } else if (e.action === 'edge-open' || e.action === 'edge-close') {
-        cur.concourse = applyEdgeLifecycle(cur.concourse, e.action, e.detail);
+        const next = applyEdgeLifecycleWithBudget(cur.concourse, cur.budget, e.action, e.detail);
+        cur.concourse = next.concourse;
+        cur.budget = next.budget;
       } else if (e.action === 'reject') cur.status = 'draft';
       else if (e.action === 'archive') cur.status = 'archived';
     } else if (e.kind === 'budget' && e.action === 'consume') {
@@ -167,6 +198,7 @@ export function replay(events: readonly LedgerEvent[]): ReplayState {
       return {
         concourse: cur.concourse,
         status: cur.status,
+        createdAt: cur.createdAt,
         handles: cur.handles,
         ...(cur.rootSessionId !== undefined ? { rootSessionId: cur.rootSessionId } : {}),
         budget: cur.budget,

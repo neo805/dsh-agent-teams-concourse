@@ -112,9 +112,12 @@ function hostMessage(e: unknown): string {
 export function createSubstrate(deps: SubstrateDeps): Substrate {
   const subagents = deps.subagents;
   const agents = deps.agents;
-  /** vertexId → startVertex 时记录的 parent（send/interrupt 的宿主授权需要 exact live Agent）。 */
+  /**
+   * childId → startVertex 时记录的 parent（interrupt 的宿主授权需要 exact live Agent）。
+   * vertexId 只在单个 concourse 内唯一；跨团队安全必须使用宿主分配的全局 childId。
+   */
   const parents = new Map<string, unknown>();
-  /** vertexId → activation 句柄（interrupt 时停止并释放）。 */
+  /** childId → activation 句柄（interrupt 时停止并释放）。 */
   const activations = new Map<string, ActivationLike>();
 
   if (subagents === undefined) {
@@ -209,19 +212,19 @@ export function createSubstrate(deps: SubstrateDeps): Substrate {
         e,
       );
     }
-    parents.set(spec.vertexId, parent);
-    activations.set(spec.vertexId, activation);
+    parents.set(activation.childId, parent);
+    activations.set(activation.childId, activation);
     return { vertexId: spec.vertexId, childId: activation.childId };
   }
 
-  /** 取回 startVertex 时记录的 parent；未知顶点 fail-loud。 */
+  /** 取回 startVertex 时记录的 parent；未知 childId fail-loud。 */
   function requireParent(code: SubstrateErrorCode, handle: VertexHandle, op: string): unknown {
-    const parent = parents.get(handle.vertexId);
+    const parent = parents.get(handle.childId);
     if (parent === undefined) {
       throw new SubstrateError(
         code,
         handle.vertexId,
-        `顶点 "${handle.vertexId}" 非本基座拉起（无 parent 记录），${op} 拒绝执行。`,
+        `顶点 "${handle.vertexId}"（child ${handle.childId}）非本基座拉起（无 parent 记录），${op} 拒绝执行。`,
       );
     }
     return parent;
@@ -284,19 +287,20 @@ export function createSubstrate(deps: SubstrateDeps): Substrate {
     }
     // 停止信号已发出；再经 activation.dispose 等待静默并释放资源（尽力而为）。
     // parents 保留：重复 interrupt 时宿主对缺席目标视为已接受 no-op（幂等）。
-    const activation = activations.get(handle.vertexId);
+    const activation = activations.get(handle.childId);
     if (activation !== undefined) {
-      activations.delete(handle.vertexId);
       try {
         await activation.dispose();
       } catch (e) {
+        // 释放失败不得提前遗忘 activation：保留句柄，允许调用方修复环境后重试。
         throw new SubstrateError(
           'INTERRUPT_FAILED',
           handle.vertexId,
-          `顶点 "${handle.vertexId}" 释放失败：${hostMessage(e)}`,
+          `顶点 "${handle.vertexId}"（child ${handle.childId}）释放失败：${hostMessage(e)}`,
           e,
         );
       }
+      activations.delete(handle.childId);
     }
   }
 

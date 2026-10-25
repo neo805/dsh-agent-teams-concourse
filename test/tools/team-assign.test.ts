@@ -71,6 +71,62 @@ describe('team_assign', () => {
     expect(out.code).toBe('ILLEGAL_TRANSITION');
   });
 
+  test('非法 model：approve-intent 与任何 vertex-start 之前失败', async () => {
+    const fx = makeFixture({ withCatalog: true });
+    const spec = {
+      ...SAMPLE_SPEC,
+      vertices: SAMPLE_SPEC.vertices.map((v) => (v.id === 'a' ? { ...v, model: 'no-such-model' } : v)),
+    };
+    fx.service.create(spec);
+    fx.service.submit('demo');
+    const out = (await createTeamAssignTool(fx.deps).execute(
+      { id: 'demo' },
+      fakeExec({ id: 'agent-root' }),
+    )) as AssignOut;
+
+    expect(out.ok).toBe(false);
+    expect(out.code).toBe('APPROVE_FAILED');
+    expect(out.message).toContain('no-such-model');
+    expect(fx.substrate.started).toEqual([]);
+    expect(fx.ledger.query({ action: 'approve-intent' })).toEqual([]);
+    expect(fx.ledger.query({ action: 'vertex-start' })).toEqual([]);
+    expect(fx.service.get('demo').status).toBe('pending-approval');
+  });
+
+  test('非法 reasoningEffort：所有显式定档预检通过前不启动任何顶点', async () => {
+    const fx = makeFixture({ withCatalog: true });
+    const spec = {
+      ...SAMPLE_SPEC,
+      vertices: SAMPLE_SPEC.vertices.map((v) =>
+        v.id === 'a' ? { ...v, model: 'm-big', reasoningEffort: 'extreme' } : v,
+      ),
+    };
+    fx.service.create(spec);
+    fx.service.submit('demo');
+    const out = (await createTeamAssignTool(fx.deps).execute(
+      { id: 'demo' },
+      fakeExec({ id: 'agent-root' }),
+    )) as AssignOut;
+
+    expect(out.ok).toBe(false);
+    expect(out.code).toBe('APPROVE_FAILED');
+    expect(out.message).toContain('extreme');
+    expect(fx.substrate.started).toEqual([]);
+    expect(fx.ledger.query({ action: 'approve-intent' })).toEqual([]);
+  });
+
+  test('合法显式 model/effort：预检通过并正常拉起', async () => {
+    const fx = makeFixture({ withCatalog: true });
+    const spec = {
+      ...SAMPLE_SPEC,
+      vertices: SAMPLE_SPEC.vertices.map((v) =>
+        v.id === 'a' ? { ...v, model: 'm-big', reasoningEffort: 'high' } : v,
+      ),
+    };
+    await makeRunning(fx, spec, { id: 'agent-root' });
+    expect(fx.substrate.started.map((s) => s.vertexId)).toEqual(['a', 'b']);
+  });
+
   test('缺必填字段 id：defineTool 入参校验拦截', async () => {
     const fx = makeFixture();
     const tool = createTeamAssignTool(fx.deps);

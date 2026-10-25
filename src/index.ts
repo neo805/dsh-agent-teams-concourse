@@ -23,7 +23,7 @@ import { createSubstrate, type AgentsLike, type SubagentsLike } from './host/sub
 import { createConcourseProvider } from './host/provider.js';
 import type { Catalog, Substrate } from './host/contracts.js';
 import { ConcourseService } from './service/concourse.js';
-import { Ledger } from './service/ledger.js';
+import { Ledger, type LedgerEvent } from './service/ledger.js';
 import { createJsonlStore, createMemoryStore, replay, type EventStore } from './service/persistence.js';
 import { registerTeamTools, type TeamToolsDeps } from './tools/index.js';
 
@@ -71,6 +71,7 @@ export async function apply(ctx: unknown, config: ConcourseConfig = {}): Promise
   let substrate: Substrate | undefined;
   let ledger: Ledger | undefined;
   let store: EventStore | undefined;
+  let bootEvents: readonly LedgerEvent[] | undefined;
   let service: ConcourseService | undefined;
 
   // 步骤 1：catalog / substrate / provider 注册
@@ -89,9 +90,10 @@ export async function apply(ctx: unknown, config: ConcourseConfig = {}): Promise
   // 步骤 2：台账 + 事件存储（显式文件路径；缺省内存，避免猜测宿主私有目录）
   try {
     store = config.storagePath !== undefined ? createJsonlStore(config.storagePath) : createMemoryStore();
-    const events = store.load();
+    // 全量 JSONL 只读取/解析一次；Ledger 与 replay 复用同一快照。
+    bootEvents = store.load();
     const s = store;
-    ledger = new Ledger({ sink: (e) => s.append(e), snapshot: events });
+    ledger = new Ledger({ sink: (e) => s.append(e), snapshot: bootEvents });
   } catch (err) {
     warn('ledger', err);
   }
@@ -104,7 +106,8 @@ export async function apply(ctx: unknown, config: ConcourseConfig = {}): Promise
     service = new ConcourseService({
       substrate,
       ledger,
-      snapshot: replay(store.load()),
+      ...(catalog !== undefined ? { catalog } : {}),
+      snapshot: replay(bootEvents ?? []),
     });
   } catch (err) {
     warn('service', err);
@@ -121,7 +124,6 @@ export async function apply(ctx: unknown, config: ConcourseConfig = {}): Promise
     const deps: TeamToolsDeps = {
       service,
       ledger,
-      substrate,
       ...(catalog !== undefined ? { catalog } : {}),
     };
     registerTeamTools((def) => c.tools?.register(def), deps);

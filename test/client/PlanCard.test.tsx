@@ -83,6 +83,14 @@ describe('PlanCard（计划审批卡）', () => {
     r.unmount();
   });
 
+  it('唤醒策略保留三态语义（on-reply 与 never 不再压成 boolean）', () => {
+    const r = render(<PlanCard plan={samplePlan()} />);
+    const text = r.text();
+    expect(text).toContain('仅应答');
+    expect(text).toContain('不唤醒');
+    r.unmount();
+  });
+
   it('选中谱系用 ●、未选用 ○、不可用用 ─（形状承载选择态）', () => {
     const r = render(<PlanCard plan={samplePlan()} />);
     const text = r.text();

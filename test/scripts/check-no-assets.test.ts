@@ -30,6 +30,10 @@ describe('check-no-assets（NFR-3 零美术资产门禁）', () => {
     expect(run(fx('violation-emoji'))).toBe(1);
   });
 
+  it('实际发布物 dist 中的图片同样违规（不只扫 src）', () => {
+    expect(run(fx('violation-dist-image'))).toBe(1);
+  });
+
   it('仓库自身 src/ 通过（永久基线：此用例不许变红）', () => {
     expect(run(repo)).toBe(0);
   });

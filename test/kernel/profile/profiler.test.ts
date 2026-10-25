@@ -46,6 +46,16 @@ describe('profileTask · 风险与安全', () => {
 });
 
 describe('profileTask · 认知与广度', () => {
+  it('英文实施词按词边界：fixture/prefix 不误判，fix the bug 仍命中', () => {
+    const readonly = profileTask({ text: 'analyze the fixture prefix only' });
+    expect(readonly.cognitive).toBe(2);
+    expect(readonly.signals.some((s) => s.startsWith('implement:'))).toBe(false);
+
+    const implementation = profileTask({ text: 'fix the bug' });
+    expect(implementation.cognitive).toBe(3);
+    expect(implementation.signals.some((s) => s.startsWith('implement:') && s.includes('fix'))).toBe(true);
+  });
+
   it('实施类词 → cognitive+1（默认 2 → 3）', () => {
     const p = profileTask({ text: '实现一个登录接口' });
     expect(p.cognitive).toBe(3);

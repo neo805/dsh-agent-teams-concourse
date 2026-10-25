@@ -8,8 +8,10 @@
 import { describe, expect, it } from 'vitest';
 import {
   admitInbound,
+  commitInbound,
   createRuntime,
   estimateMessageTokens,
+  evaluateInbound,
   type InboundMessage,
 } from '../../src/service/inbox-gate.js';
 import { Ledger } from '../../src/service/ledger.js';
@@ -104,6 +106,66 @@ describe('dedup 层', () => {
 });
 
 describe('rate 层', () => {
+  it('degraded 消息仍真实投递：预算恰好扣一次且写 budget/consume', () => {
+    const clock = manualClock();
+    const c = parseConcourse({
+      id: 'c-rate-budget',
+      tier: 'T1a',
+      budget: { tokens: 100 },
+      vertices: [
+        { id: 'a', origin: 'self' },
+        { id: 'b', parent: 'a', layer: 1 },
+      ],
+      edges: [{ from: 'a', to: 'b', rate: { n: 1, perMs: 1000 } }],
+    });
+    const ledger = new Ledger({ now: clock.now });
+    const rt = createRuntime(c, { now: clock.now });
+
+    expect(admitInbound(rt, msg({ content: '12345678' }), { ledger }).kind).toBe('deliver');
+    expect(rt.budget.remainingGlobal()).toBe(98);
+    expect(admitInbound(rt, msg({ content: 'abcdefgh' }), { ledger })).toMatchObject({
+      kind: 'degrade',
+      reason: 'RATE_LIMIT',
+    });
+    expect(rt.budget.remainingGlobal()).toBe(96);
+    expect(ledger.query({ kind: 'budget', action: 'consume' })).toHaveLength(2);
+    expect(ledger.query({ kind: 'budget', action: 'consume' })[1]?.detail).toMatchObject({
+      tokens: 2,
+      result: 'ok',
+    });
+  });
+
+  it('预检与提交共用同一时刻：窗口边界不得翻转已决定的 verdict', () => {
+    const clock = manualClock();
+    const c = parseConcourse({
+      id: 'c-rate-boundary',
+      tier: 'T1a',
+      vertices: [
+        { id: 'a', origin: 'self' },
+        { id: 'b', parent: 'a', layer: 1 },
+      ],
+      edges: [{ from: 'a', to: 'b', rate: { n: 1, perMs: 10 } }],
+    });
+    const ledger = new Ledger({ now: clock.now });
+    const rt = createRuntime(c, { now: clock.now });
+
+    const first = evaluateInbound(rt, msg({ content: 'first' }));
+    expect(commitInbound(rt, msg({ content: 'first' }), first, ledger).kind).toBe('deliver');
+
+    clock.advance(1);
+    const secondMsg = msg({ content: 'second' });
+    const plan = evaluateInbound(rt, secondMsg);
+    expect(plan.verdict).toBe('degrade');
+
+    // 真实投递/提交流程可能推进时钟到窗口之外；提交仍须遵守预检时的决定。
+    clock.advance(11);
+    expect(commitInbound(rt, secondMsg, plan, ledger)).toMatchObject({
+      kind: 'degrade',
+      reason: 'RATE_LIMIT',
+    });
+    expect(ledger.query({ kind: 'comm' }).at(-1)?.action).toBe('degrade');
+  });
+
   it('窗口内超额 → degrade(RATE_LIMIT)（降级不丢消息，留痕）', () => {
     const clock = manualClock();
     const c = parseConcourse({

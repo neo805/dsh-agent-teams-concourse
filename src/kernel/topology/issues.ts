@@ -146,13 +146,26 @@ export function findUnknownKeyIssues(raw: unknown): SchemaIssue[] {
   return issues;
 }
 
-/** ZodError → 规范化 issue 列表（code=SCHEMA，path 用点号连接）。 */
+/**
+ * zod path → 统一 path 格式：数字段用 `[n]`，根级路径省略。
+ * 例：['vertices', 0, 'id'] → `vertices[0].id`。
+ */
+export function formatIssuePath(path: readonly PropertyKey[]): string | undefined {
+  if (path.length === 0) return undefined;
+  let out = '';
+  for (const part of path) {
+    if (typeof part === 'number') out += `[${part}]`;
+    else out += out.length === 0 ? String(part) : `.${String(part)}`;
+  }
+  return out.length > 0 ? out : undefined;
+}
+
+/** ZodError → 规范化 issue 列表（code=SCHEMA，path 与语义 issue 同形）。 */
 export function zodErrorToIssues(err: ZodError): SchemaIssue[] {
-  return err.issues.map((i) => ({
-    code: 'SCHEMA',
-    message: i.message,
-    path: i.path.join('.'),
-  }));
+  return err.issues.map((i) => {
+    const path = formatIssuePath(i.path);
+    return { code: 'SCHEMA', message: i.message, ...(path !== undefined ? { path } : {}) };
+  });
 }
 
 /** ZodError → 一行中文摘要（供 message 使用，不再拼整段 JSON）。 */
@@ -160,7 +173,7 @@ export function zodErrorSummary(err: ZodError): string {
   const issues = err.issues;
   const first = issues[0];
   if (first === undefined) return '结构非法（无详情）';
-  const path = first.path.join('.');
+  const path = formatIssuePath(first.path);
   const more = issues.length > 1 ? `（等 ${issues.length} 处）` : '';
-  return `${path.length > 0 ? `${path}：` : ''}${first.message}${more}`;
+  return `${path !== undefined ? `${path}：` : ''}${first.message}${more}`;
 }

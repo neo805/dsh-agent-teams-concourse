@@ -11,6 +11,7 @@ import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { cwd, exit } from 'node:process';
 import { runInNewContext as vmRunInNewContext } from 'node:vm';
+import { packedFileIssues } from './pack-contract.mjs';
 
 const root = cwd();
 const tmp = mkdtempSync(join(tmpdir(), 'concourse-pack-'));
@@ -64,13 +65,44 @@ try {
   });
   if (typeof client.apply !== 'function') throw new Error('client 入口缺少 apply()');
 
-  const pkg = JSON.parse(readFileSync(join(pkgDir, 'package.json'), 'utf8'));
-  for (const required of ['cordis.patch.yml', 'README.md', 'LICENSE']) {
-    if (!pkg.files?.some((f) => required.startsWith(f) || f === required)) {
-      throw new Error(`files 清单缺少 ${required}`);
-    }
+  // 实际执行打包后的 client.apply：keyed slot 必须用 key，页型必须进 effect。
+  const tabDefs = [];
+  const slotDefs = [];
+  client.apply({
+    logger: { warn: () => {} },
+    effect: (fn) => fn(),
+    sidebarRightTabs: {
+      register: (definition) => {
+        tabDefs.push(definition);
+        return () => {};
+      },
+    },
+    slots: {
+      inject: (_name, factory) => {
+        factory();
+        return () => {};
+      },
+      register: (definition) => {
+        if (definition.name === 'sidebar.right.pane.tab' && typeof definition.key !== 'string') {
+          throw new Error('keyed slot 缺少 key');
+        }
+        slotDefs.push(definition);
+        return () => {};
+      },
+    },
+  });
+  if (tabDefs.length !== 1) throw new Error(`client 页型注册次数异常：${tabDefs.length}`);
+  if (slotDefs.length !== 1) throw new Error(`client 面板体注册次数异常：${slotDefs.length}`);
+  if (slotDefs[0]?.key !== 'dsh-agent-teams-concourse') {
+    throw new Error(`client panel key 契约破坏：${String(slotDefs[0]?.key)}`);
   }
-  console.log('[pack-smoke] 通过：包可装载，入口契约完整。');
+  if ('id' in slotDefs[0]) throw new Error('client panel 不得沿用页型 id 字段');
+
+  const pkg = JSON.parse(readFileSync(join(pkgDir, 'package.json'), 'utf8'));
+  if (!Array.isArray(pkg.files) || pkg.files.length === 0) throw new Error('package.json files 清单为空');
+  const issues = packedFileIssues(pkgDir);
+  if (issues.length > 0) throw new Error(`解包文件契约失败：${issues.join('；')}`);
+  console.log('[pack-smoke] 通过：包可装载，入口与文件契约完整。');
 } catch (error) {
   console.error('[pack-smoke] 失败：', error instanceof Error ? error.message : String(error));
   exit(1);

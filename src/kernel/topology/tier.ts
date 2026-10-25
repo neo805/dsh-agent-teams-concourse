@@ -5,6 +5,7 @@
  * 为横向边（子团队内协商信道）。decideTier 看「用户回答」：Q1–Q5 决策树。
  * 纯函数，零宿主依赖。
  */
+import { undirectedPairKey } from '../keys.js';
 import type { Edge, Tier, Vertex } from './schema.js';
 
 /** 谱系中文标签（P6 形状语义的唯一文本载体）。 */
@@ -15,11 +16,6 @@ export const TIER_LABELS: Record<Tier, string> = {
   'T1.5': 'T1.5 混合',
   T2a: 'T2a 多领队并列',
 };
-
-/** 无序顶点对 key：parent 树边是逻辑关系，与方向无关。 */
-function pairKey(a: string, b: string): string {
-  return a < b ? `${a} ${b}` : `${b} ${a}`;
-}
 
 /**
  * 按实际形状分类：
@@ -35,9 +31,9 @@ export function classify(vertices: Vertex[], edges: Edge[]): Tier {
   // 树边无序对集合（含双向：request-reply 的反向应答边同属树边，A2）
   const treePairs = new Set<string>();
   for (const v of vertices) {
-    if (v.parent !== null) treePairs.add(pairKey(v.parent, v.id));
+    if (v.parent !== null) treePairs.add(undirectedPairKey(v.parent, v.id));
   }
-  const hasLateral = edges.some((e) => !treePairs.has(pairKey(e.from, e.to)));
+  const hasLateral = edges.some((e) => !treePairs.has(undirectedPairKey(e.from, e.to)));
   if (hasLateral) return 'T1.5';
 
   const maxLayer = vertices.reduce((m, v) => Math.max(m, v.layer), 0);

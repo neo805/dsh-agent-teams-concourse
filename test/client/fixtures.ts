@@ -65,8 +65,8 @@ export function samplePlan(): PlanView {
     totalBudget: '170k',
     costHint: '≈ ¥1.6',
     edges: [
-      { from: 'captain', to: 'sub-A', kind: '树边', hopTTL: 2, rate: '3/10min', wake: true },
-      { from: 'sub-A', to: 'w-1', kind: '子团队内', hopTTL: 1, rate: '5/10min', wake: false },
+      { from: 'captain', to: 'sub-A', kind: '树边', hopTTL: 2, rate: '3/10min', wake: 'on-reply' },
+      { from: 'sub-A', to: 'w-1', kind: '子团队内', hopTTL: 1, rate: '5/10min', wake: 'never' },
     ],
     closedEdgeCount: 17,
     approvalStrategy: '一次批准，此后运行期零审批',

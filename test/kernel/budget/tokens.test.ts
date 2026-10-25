@@ -96,6 +96,46 @@ describe('estimateConcourseBudget（顶点级乘 effort 系数）', () => {
     expect(r.total).toBe(60000);
   });
 
+  it('native effort 归一化与 suggest 一致：max/xhigh 按 high 计费系数', () => {
+    const c = concourse({
+      vertices: [vertex('a', 'max'), vertex('b', 'xhigh'), vertex('c', 'medium')],
+      tasks: [
+        task({ id: 't1', assignee: 'a' }),
+        task({ id: 't2', assignee: 'b' }),
+        task({ id: 't3', assignee: 'c' }),
+      ],
+    });
+    const r = estimateConcourseBudget(c);
+    expect(r.perVertex['a']).toBe(20000 * 1.8);
+    expect(r.perVertex['b']).toBe(20000 * 1.8);
+    expect(r.perVertex['c']).toBe(20000);
+  });
+
+  it('特殊字符串 ID 不读原型链：constructor / __proto__ 产生有限数值', () => {
+    const c = concourse({
+      vertices: [vertex('constructor'), vertex('__proto__')],
+      tasks: [
+        task({ id: 't1', assignee: 'constructor' }),
+        task({ id: 't2', assignee: '__proto__' }),
+      ],
+    });
+    const r = estimateConcourseBudget(c);
+    expect(r.perVertex['constructor']).toBe(20000);
+    expect(r.perVertex['__proto__']).toBe(20000);
+    expect(Number.isFinite(r.total)).toBe(true);
+    expect(Object.hasOwn(r.perVertex, '__proto__')).toBe(true);
+  });
+
+  it('特殊 reasoningEffort 不读继承值', () => {
+    const c = concourse({
+      vertices: [vertex('a', 'constructor')],
+      tasks: [task({ assignee: 'a' })],
+    });
+    const r = estimateConcourseBudget(c);
+    expect(r.perVertex['a']).toBe(20000);
+    expect(Number.isFinite(r.total)).toBe(true);
+  });
+
   it('空任务列表：total=0', () => {
     expect(estimateConcourseBudget(concourse()).total).toBe(0);
   });

@@ -119,6 +119,9 @@ describe('suggest · tier 与 toolFilter', () => {
     const s = suggest(baseProfile({ cognitive: 2, risk: 'readonly', contextTokens: 100000 }), CATALOG);
     // deepseek-chat 窗口 128000，一半 64000 < 100000 → 被排除；cheap 无候选 → 回退全体合格候选
     expect(s.model).not.toBe('deepseek-chat');
+    // tokenTier 必须报告实际选中模型的档位，而不是最初目标档。
+    // 128k 模型在 100k 上下文下均被排除，只剩 claude-opus（premium）。
+    expect(s.tokenTier).toBe('premium');
   });
 
   it('tier 内按 (contextWindow 升序, model 字典序) 取第一', () => {
@@ -140,9 +143,9 @@ describe('suggest · 其他字段', () => {
   it('confidence = 0.5 + 0.1×signals 数，封顶 0.95', () => {
     const noSignals = suggest(baseProfile(), CATALOG);
     expect(noSignals.confidence).toBe(0.5);
-    const withSignals = suggest({ ...baseProfile(), signals: ['a', 'b', 'c'] } as never, CATALOG);
+    const withSignals = suggest({ ...baseProfile(), signals: ['a', 'b', 'c'] }, CATALOG);
     expect(withSignals.confidence).toBeCloseTo(0.8, 5);
-    const many = suggest({ ...baseProfile(), signals: Array(20).fill('x') } as never, CATALOG);
+    const many = suggest({ ...baseProfile(), signals: Array(20).fill('x') }, CATALOG);
     expect(many.confidence).toBe(0.95);
   });
 

@@ -30,6 +30,12 @@ describe('dedupKey', () => {
     expect(p1).toBe(p2);
   });
 
+  it('字段边界不可通过分隔符碰撞', () => {
+    const k1 = dedupKey({ from: 'a', to: 'b\u001fc', correlationId: 'd', content: 'x' });
+    const k2 = dedupKey({ from: 'a\u001fb', to: 'c', correlationId: 'd', content: 'x' });
+    expect(k1).not.toBe(k2);
+  });
+
   it('字段不同则 key 不同', () => {
     const base = { from: 'a', to: 'b', correlationId: 'c', content: 'x' };
     const keys = new Set([

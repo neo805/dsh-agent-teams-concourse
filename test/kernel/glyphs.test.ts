@@ -82,6 +82,16 @@ describe('renderTree · L2 文字树', () => {
     ]);
     expect(lines).toEqual(['○ r1', '○ r2', '└─○ x']);
   });
+
+  it('特殊 ID 不读 Object 原型：constructor / __proto__ 缺省状态安全', () => {
+    expect(renderTree([{ id: 'constructor', parent: null }])).toEqual(['○ constructor']);
+    expect(renderTree([{ id: '__proto__', parent: null }])).toEqual(['○ __proto__']);
+  });
+
+  it('status 只读取自有属性，__proto__ 可正常显示 done', () => {
+    const status = Object.fromEntries([['__proto__', 'done']]) as Record<string, 'done'>;
+    expect(renderTree([{ id: '__proto__', parent: null }], { status })).toEqual(['✓ __proto__']);
+  });
 });
 
 describe('formatOverviewLine · L0 单行总览', () => {
@@ -108,5 +118,12 @@ describe('formatOverviewLine · L0 单行总览', () => {
     expect(mk(0)).toContain('▱▱▱▱▱▱▱▱▱▱ 0%');
     expect(mk(100)).toContain('▰▰▰▰▰▰▰▰▰▰ 100%');
     expect(mk(5)).toContain('▰▱▱▱▱▱▱▱▱▱ 5%');
+  });
+
+  it('预算条对越界百分比 clamp，不抛 RangeError', () => {
+    const mk = (budgetPct: number) =>
+      formatOverviewLine({ tier: 'T0', tierLabel: '单点', vertices: 1, depth: 0, active: 0, openEdges: 0, totalEdges: 0, budgetPct, echo: 0, fused: 0 });
+    expect(mk(110)).toContain('▰▰▰▰▰▰▰▰▰▰ 110%');
+    expect(mk(-20)).toContain('▱▱▱▱▱▱▱▱▱▱ -20%');
   });
 });
