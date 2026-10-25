@@ -36,6 +36,14 @@ describe('dedupKey', () => {
     expect(k1).not.toBe(k2);
   });
 
+  it('内容摘要碰撞的不同正文仍必须产生不同 dedupKey（摘要不得作为唯一身份）', () => {
+    // FNV-1a 32 位已知碰撞：两者 contentDigest 相同，但正文不同。
+    expect(contentDigest('costarring')).toBe(contentDigest('liquid'));
+    const a = dedupKey({ from: 'a', to: 'b', content: 'costarring' });
+    const b = dedupKey({ from: 'a', to: 'b', content: 'liquid' });
+    expect(a).not.toBe(b);
+  });
+
   it('字段不同则 key 不同', () => {
     const base = { from: 'a', to: 'b', correlationId: 'c', content: 'x' };
     const keys = new Set([

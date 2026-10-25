@@ -184,6 +184,43 @@ describe('发送与准入的防御分支', () => {
   });
 });
 
+describe('运行期改边参数校验', () => {
+  test('直调 service.link 的 hopTTL<=0 在写台账前 fail-loud，拓扑不变', async () => {
+    const fx = makeFixture();
+    await makeRunning(fx);
+    const before = fx.service.get('demo').concourse.edges;
+    for (const hopTTL of [0, -1]) {
+      let error: unknown;
+      try {
+        fx.service.link('demo', { from: 'a', to: 'b', action: 'open', hopTTL });
+      } catch (err) {
+        error = err;
+      }
+      expect(error).toBeInstanceOf(ConcourseError);
+      expect((error as ConcourseError).code).toBe('INVALID_SPEC');
+      expect((error as ConcourseError).issues?.length).toBeGreaterThan(0);
+    }
+    expect(fx.service.get('demo').concourse.edges).toEqual(before);
+    expect(fx.ledger.query({ action: 'edge-open' })).toHaveLength(0);
+  });
+
+  test('hopTTL=1 可开边，第一跳投递、第二跳 HOP_LIMIT', async () => {
+    const fx = makeFixture();
+    await makeRunning(fx);
+    const out = fx.service.link('demo', { from: 'a', to: 'b', action: 'open', hopTTL: 1 });
+    expect(out.concourse.edges.find((e) => e.from === 'a' && e.to === 'b')?.hopTTL).toBe(1);
+    const runtime = fx.service.runtime('demo');
+    const { evaluateInbound } = await import('../../src/service/inbox-gate.js');
+    expect(evaluateInbound(runtime, { from: 'a', to: 'b', content: 'first', hops: 1 }).verdict).toBe(
+      'deliver',
+    );
+    expect(evaluateInbound(runtime, { from: 'a', to: 'b', content: 'second', hops: 2 })).toMatchObject({
+      verdict: 'reject',
+      reason: 'HOP_LIMIT',
+    });
+  });
+});
+
 describe('多 concourse 身份解析', () => {
   test('同一领队下按唯一 sender 归属 concourse，闭边记到正确的第二条', async () => {
     const fx = makeFixture();

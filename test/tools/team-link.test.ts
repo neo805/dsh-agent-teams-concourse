@@ -102,6 +102,19 @@ describe('team_link', () => {
     expect(fx.ledger.query({ action: 'edge-close' })).toHaveLength(1);
   });
 
+  test('hopTTL 必须 >=1：0/负数在工具入参边界被拒，零台账', async () => {
+    const fx = makeFixture();
+    await makeRunning(fx);
+    const tool = createTeamLinkTool(fx.deps);
+    await expect(
+      tool.execute({ id: 'demo', from: 'a', to: 'b', action: 'open', hopTTL: 0 }, fakeExec()),
+    ).rejects.toThrow();
+    await expect(
+      tool.execute({ id: 'demo', from: 'a', to: 'b', action: 'open', hopTTL: -1 }, fakeExec()),
+    ).rejects.toThrow();
+    expect(fx.ledger.query({ action: 'edge-open' })).toHaveLength(0);
+  });
+
   test('非 running 状态拒绝（draft）', async () => {
     const fx = makeFixture();
     fx.service.create({

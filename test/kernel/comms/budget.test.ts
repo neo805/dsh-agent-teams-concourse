@@ -112,6 +112,20 @@ describe('只读预检与运行时重建', () => {
     expect(next.isGlobalFused()).toBe(false);
   });
 
+  it('withEdgeBudgets 删除已移除边的熔断标记，仅保留仍有预算登记的边', () => {
+    const b = new BudgetBook({
+      edgeBudgets: { [key('a', 'b')]: 1, [key('a', 'c')]: 1 },
+    });
+    expect(b.consumeEdge('a', 'b', 2)).toBe('fuse-edge');
+    expect(b.consumeEdge('a', 'c', 2)).toBe('fuse-edge');
+
+    const next = b.withEdgeBudgets({ [key('a', 'c')]: 1 });
+    expect(next.isFusedEdge('a', 'b')).toBe(false);
+    expect(next.canConsume('a', 'b', 1)).toBe('ok');
+    expect(next.isFusedEdge('a', 'c')).toBe(true);
+    expect(next.canConsume('a', 'c', 1)).toBe('fuse-edge');
+  });
+
   it('预检覆盖全局熔断/边熔断/全局超额分支', () => {
     const b = new BudgetBook({ edgeBudgets: { [key('a', 'b')]: 5 }, globalBudget: 2 });
     expect(b.canConsume('a', 'b', 3)).toBe('fuse-global');

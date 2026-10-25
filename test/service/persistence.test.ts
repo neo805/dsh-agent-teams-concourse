@@ -195,6 +195,52 @@ describe('改边后的预算回放等价', () => {
   });
 });
 
+describe('改边后的熔断状态恢复', () => {
+  it('熔断边 close→open 后清除 fuse，live 与 replay 均可恢复投递', async () => {
+    const store = createMemoryStore();
+    const { service, substrate } = makeWiredService(store);
+    service.create({
+      ...t1aInput(),
+      edges: [
+        {
+          from: 'captain',
+          to: 'w-1',
+          mode: 'notify',
+          wake: 'on-reply',
+          hopTTL: 2,
+          budget: { tokens: 1 },
+        },
+      ],
+    });
+    service.submit('c-persist');
+    await service.approve('c-persist', { id: 'root' });
+
+    expect(
+      service.send('c-persist', { from: 'captain', to: 'w-1', content: '12345678' }, { id: 'root' }),
+    ).toMatchObject({ outcome: 'reject', reason: 'FUSE_EDGE' });
+    expect(service.runtime('c-persist').budget.isFusedEdge('captain', 'w-1')).toBe(true);
+
+    service.link('c-persist', { from: 'captain', to: 'w-1', action: 'close' });
+    service.link('c-persist', { from: 'captain', to: 'w-1', action: 'open' });
+    expect(service.runtime('c-persist').budget.remainingEdge('captain', 'w-1')).toBeUndefined();
+    expect(service.runtime('c-persist').budget.isFusedEdge('captain', 'w-1')).toBe(false);
+    expect(
+      service.send('c-persist', { from: 'captain', to: 'w-1', content: 'abcdefgh' }, { id: 'root' }),
+    ).toMatchObject({ outcome: 'deliver' });
+
+    const revived = new ConcourseService({
+      substrate,
+      ledger: new Ledger({ snapshot: store.load() }),
+      now: fakeClock(),
+      snapshot: replay(store.load()),
+    });
+    expect(revived.runtime('c-persist').budget.isFusedEdge('captain', 'w-1')).toBe(false);
+    expect(
+      revived.send('c-persist', { from: 'captain', to: 'w-1', content: 'after-restart' }, { id: 'root' }),
+    ).toMatchObject({ outcome: 'deliver' });
+  });
+});
+
 describe('模拟重启后续跑', () => {
   const dirs: string[] = [];
   afterEach(() => {

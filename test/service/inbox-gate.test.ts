@@ -94,6 +94,16 @@ describe('dedup 层', () => {
     expect(admitInbound(rt, msg({ content: 'world' })).kind).toBe('deliver');
   });
 
+  it('32 位内容摘要碰撞的不同正文都可投递，同一正文重放仍 DUPLICATE', () => {
+    const rt = createRuntime(twoVertexConcourse());
+    expect(admitInbound(rt, msg({ content: 'costarring' })).kind).toBe('deliver');
+    expect(admitInbound(rt, msg({ content: 'liquid' })).kind).toBe('deliver');
+    expect(admitInbound(rt, msg({ content: 'costarring' }))).toMatchObject({
+      kind: 'reject',
+      reason: 'DUPLICATE',
+    });
+  });
+
   it('correlationId 参与去重键', () => {
     const rt = createRuntime(twoVertexConcourse());
     expect(admitInbound(rt, msg({ correlationId: 'x' })).kind).toBe('deliver');
