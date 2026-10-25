@@ -3,7 +3,13 @@
  * P6 结构断言：任意两状态形状两两可辨；形状承载语义，零美术资产。
  */
 import { describe, expect, it } from 'vitest';
-import { GLYPHS, STATUS, formatOverviewLine, renderTree } from '../../src/kernel/glyphs.js';
+import {
+  GLYPHS,
+  STATUS,
+  formatOverviewLine,
+  renderTree,
+  renderTreeRows,
+} from '../../src/kernel/glyphs.js';
 
 describe('GLYPHS · 状态表', () => {
   it('恰好 7 个状态', () => {
@@ -86,6 +92,19 @@ describe('renderTree · L2 文字树', () => {
   it('特殊 ID 不读 Object 原型：constructor / __proto__ 缺省状态安全', () => {
     expect(renderTree([{ id: 'constructor', parent: null }])).toEqual(['○ constructor']);
     expect(renderTree([{ id: '__proto__', parent: null }])).toEqual(['○ __proto__']);
+  });
+
+  it('renderTreeRows 保留每行对应的顶点 id，不靠反查渲染字符串', () => {
+    const rows = renderTreeRows([
+      { id: 'a', parent: null },
+      { id: 'a-1', parent: null, role: 'a' },
+    ]);
+    expect(rows.map((r) => r.id)).toEqual(['a', 'a-1']);
+    expect(rows.map((r) => r.line)).toEqual(['○ a', '○ a-1  a']);
+    expect(renderTree([
+      { id: 'a', parent: null },
+      { id: 'a-1', parent: null, role: 'a' },
+    ])).toEqual(rows.map((r) => r.line));
   });
 
   it('status 只读取自有属性，__proto__ 可正常显示 done', () => {

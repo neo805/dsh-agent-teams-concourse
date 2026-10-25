@@ -48,6 +48,32 @@ describe('TopologyTree（L2）', () => {
     r.unmount();
   });
 
+  it('折叠声明按顶点 id 精确关联：兄弟 a-1 不会被 a 的标记误伤', () => {
+    const r = render(
+      <TopologyTree
+        vertices={[
+          { id: 'a', status: 'active', parent: null, layer: 0 },
+          { id: 'a-1', status: 'blocked', parent: null, layer: 0 },
+        ]}
+        collapsedIds={['a']}
+      />,
+    );
+    const lines = r.text().split('\n');
+    expect(lines).toContain('● a（▸ 0 个顶点已折叠）');
+    expect(lines.find((l) => l.startsWith('◆ a-1'))).not.toContain('已折叠');
+    r.unmount();
+  });
+
+  it('特殊顶点 id __proto__ 不丢状态形状/颜色映射', () => {
+    const r = render(
+      <TopologyTree
+        vertices={[{ id: '__proto__', status: 'active', parent: null, layer: 0 }]}
+      />,
+    );
+    expect(r.text()).toContain('● __proto__');
+    r.unmount();
+  });
+
   it('被折叠顶点的子孙若恰为另一折叠点的祖先，父指针重映射到最近可见祖先', () => {
     const view = sampleView();
     // 折叠 sub-lead-B（无下游折叠嵌套场景的对照：w-3 被隐藏，树其余结构完整）

@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 /** 计划审批卡：§7.6.3 五段齐全 + 风险显式列出。 */
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { PlanCard } from '../../src/client/PlanCard.js';
 import { render } from './helpers.js';
 import { samplePlan } from './fixtures.js';
@@ -63,6 +63,26 @@ describe('PlanCard（计划审批卡）', () => {
       if (b.textContent === '弃') b.click();
     }
     expect(fired).toEqual(['approve', 'revise', 'discard']);
+    r.unmount();
+  });
+
+  it('含箭头的顶点 id 不会产生重复 React key 警告', () => {
+    const plan = samplePlan();
+    const withCollidingDisplayKeys = {
+      ...plan,
+      edges: [
+        { from: 'a->b', to: 'c', kind: '树边', hopTTL: 2, wake: 'never' as const },
+        { from: 'a', to: 'b->c', kind: '树边', hopTTL: 2, wake: 'never' as const },
+      ],
+    };
+    const errors: string[] = [];
+    const spy = vi.spyOn(console, 'error').mockImplementation((...args: unknown[]) => {
+      errors.push(args.map(String).join(' '));
+    });
+    const r = render(<PlanCard plan={withCollidingDisplayKeys} />);
+    spy.mockRestore();
+    expect(r.container.querySelectorAll('.concourse-plan-edges tbody tr')).toHaveLength(2);
+    expect(errors.join('\n')).not.toMatch(/same key|duplicate key/i);
     r.unmount();
   });
 
