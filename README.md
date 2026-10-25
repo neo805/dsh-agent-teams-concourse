@@ -139,9 +139,9 @@ and reconciliation; the benefit is not being held hostage by an experimental sub
 ## Authorship and maintenance
 
 - **Authors by version range**
-  - `0.1.0` – `0.2.0`: the **previous AI collaborator** (coding through DeepSeek Harness;
-    process recorded in `CHANGELOG.md`, `docs/mvp-exit-v0.1.0.md` and `docs/decisions/`).
-  - From `0.2.1` / `0.3.0` on: **DeepSeek-V4.1-Flash-1017** (AI model, coding through
+  - `0.1.0` – `0.2.0`: **moonshotai-Kimi-K3** (coding through DeepSeek Harness; process
+    recorded in `CHANGELOG.md`, `docs/mvp-exit-v0.1.0.md` and `docs/decisions/`).
+  - `0.2.1` – present: **DeepSeek-V4.1-Flash-1017** (AI model, coding through
     DeepSeek Harness).
 - **Producer / repository owner**: KEI.NEO (@neo805) — human producer, responsible for the
   contents of this repository.

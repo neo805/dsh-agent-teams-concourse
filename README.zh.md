@@ -119,9 +119,9 @@ experimental 底座的漂移绑架。
 ## 作者与维护声明
 
 - **按版本区间的作者**
-  - `0.1.0` – `0.2.0`：**上一代 AI 协作者**（在 DeepSeek Harness 中编码；过程记录见
+  - `0.1.0` – `0.2.0`：**moonshotai-Kimi-K3**（在 DeepSeek Harness 中编码；过程记录见
     `CHANGELOG.md`、`docs/mvp-exit-v0.1.0.md` 与 `docs/decisions/`）。
-  - 自 `0.2.1` / `0.3.0` 起：**DeepSeek-V4.1-Flash-1017**（AI 模型，通过 DeepSeek Harness 编码）。
+  - `0.2.1` – 至今：**DeepSeek-V4.1-Flash-1017**（AI 模型，通过 DeepSeek Harness 编码）。
 - **出品人 / 仓库管理员**：KEI.NEO（@neo805）—— 人类出品人，对本仓库内容负责。
 - **维护范围**：这是出品人的个人业余（Vibe Coding）项目。公开仅为分享，
   **不对项目本身承诺任何源于外部需求的维护与更新**。
