@@ -68,6 +68,7 @@ try {
   // 实际执行打包后的 client.apply：keyed slot 必须用 key，页型必须进 effect。
   const tabDefs = [];
   const slotDefs = [];
+  const openedTabs = [];
   client.apply({
     logger: { warn: () => {} },
     effect: (fn) => fn(),
@@ -75,6 +76,13 @@ try {
       register: (definition) => {
         tabDefs.push(definition);
         return () => {};
+      },
+    },
+    sidebarRight: {
+      openTab: (kind) => openedTabs.push(kind),
+      mounted: {
+        getSnapshot: () => 'pack-smoke-session',
+        subscribe: () => () => {},
       },
     },
     slots: {
@@ -92,6 +100,12 @@ try {
     },
   });
   if (tabDefs.length !== 1) throw new Error(`client 页型注册次数异常：${tabDefs.length}`);
+  if (!Array.isArray(tabDefs[0]?.guide) || tabDefs[0].guide.length === 0) {
+    throw new Error('client 页型缺少 guide 入口，右侧栏无法发现 Concourse');
+  }
+  if (openedTabs.length !== 1 || openedTabs[0] !== 'concourse') {
+    throw new Error(`client 未在会话挂载时自动打开 concourse：${String(openedTabs)}`);
+  }
   if (slotDefs.length !== 1) throw new Error(`client 面板体注册次数异常：${slotDefs.length}`);
   if (slotDefs[0]?.key !== 'dsh-agent-teams-concourse') {
     throw new Error(`client panel key 契约破坏：${String(slotDefs[0]?.key)}`);

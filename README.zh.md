@@ -2,7 +2,7 @@
 
 [English](README.md) | 中文
 
-**版本：** `0.2.1-rc.3`（DSH 基线 `0.2.1-rc.2`；契约、通信与回放一致性硬化批次，Web 核心链路已验证，UI 视觉/Desktop 验收待办）· [变更日志](CHANGELOG.md) · [需求文档](docs/REQUIREMENTS.html) · [开发计划](DEVELOPMENT_PLAN.md) · [协作规范](COLLABORATION.md)
+**版本：** `0.2.1-rc.4`（DSH 基线 `0.2.1-rc.2`；契约、通信与回放一致性硬化 + 侧栏可发现性修复，Web 核心链路已验证，UI 视觉/Desktop 重启验收待办）· [变更日志](CHANGELOG.md) · [需求文档](docs/REQUIREMENTS.html) · [开发计划](DEVELOPMENT_PLAN.md) · [协作规范](COLLABORATION.md)
 
 DSH 的**组织层**插件：把「谁和谁能通信、每个执行单元用什么模型与思考强度、产出如何回到主线」
 变成可编辑的一等数据。拓扑不是搭出来的，是**剪**出来的——底座在物理上已是完全图，本插件在其上
@@ -29,10 +29,11 @@ DSH 的**组织层**插件：把「谁和谁能通信、每个执行单元用什
 | 会话加入与 T2a 多领队并列（`team_join`） | ⏳ 计划中（P8） |
 
 已在 scratch profile 上做过 T1a（星形）与 T1b（多层树）的真机冒烟（`0.1.0` 期间），闭边拦截原文在案；
-`0.2.0` 已装入 Web profile 并通过体检。`0.2.1-rc.3` 修复客户端 keyed slot 契约、
-跨 concourse 身份、degraded 消息账目、回放预算等价与模型预检。核心 Web 链路已在最小
-`conc03` scratch profile 验证：plan → assign → deliver → 闭边拒绝 → 重开边；重启回放
-状态一致；非法 model 预检零拉起。UI 视觉验收与 Desktop 安装仍待完成，不作为已验证。
+`0.2.0` 已装入 Web profile 并通过体检。`0.2.1-rc.4` 修复客户端 keyed slot 契约，
+增加侧栏 guide 入口与会话挂载时一次自动打开，并保留 rc.3 的通信/回放硬化。核心 Web
+链路已在最小 `conc03` scratch profile 验证：plan → assign → deliver → 闭边拒绝 →
+重开边；重启回放状态一致；非法 model 预检零拉起。重启 rc.4 宿主后的 UI 视觉验收仍待
+完成，不作为已验证。
 
 ## 前置条件
 
@@ -49,7 +50,7 @@ pnpm verify
 pnpm pack
 
 # 2) 装进某个 profile，然后**完全重启**宿主（宿主插件只在启动时加载）
-dsh plugin --profile <profile> add <path-to>\dsh-agent-teams-concourse-0.2.1-rc.3.tgz
+dsh plugin --profile <profile> add <path-to>\dsh-agent-teams-concourse-0.2.1-rc.4.tgz
 ```
 
 在该 profile 的 `cordis.patch.yml` 里打开它（缺省惰性）：

@@ -21,7 +21,7 @@ import type { ConcourseView } from './types.js';
 export const name = 'dsh-agent-teams-concourse-client';
 
 /** cordis 依赖注入声明（web 平台服务名）。 */
-export const inject = ['sidebarRightTabs', 'slots'];
+export const inject = ['sidebarRightTabs', 'slots', 'sidebarRight'];
 
 /** 页型定义 id / kind（sidebar.right.pane.tab 的 keyed 派发键）。 */
 export const TAB_DEFINITION_ID = 'dsh-agent-teams-concourse';
@@ -48,6 +48,16 @@ export function ConcoursePanelEntry() {
 /** 宿主上下文最小结构面（防御式：任何字段缺席都跳过该注册步骤）。 */
 interface ClientCtxLike {
   sidebarRightTabs?: { register?(definition: unknown): unknown } | undefined;
+  /** 右侧栏导航面：打开 page type，并暴露当前挂载会话。 */
+  sidebarRight?:
+    | {
+        openTab?(kind: string, options?: unknown): void;
+        mounted?: {
+          getSnapshot(): string | undefined;
+          subscribe(listener: () => void): () => void;
+        };
+      }
+    | undefined;
   slots?:
     | {
         inject?(slotName: string, factory: () => unknown): unknown;
@@ -62,12 +72,12 @@ interface ClientCtxLike {
 export function apply(ctx?: unknown): void {
   const c = (ctx ?? {}) as ClientCtxLike;
   const warn = (step: string, err: unknown): void => {
+    const message = `[concourse] 客户端 ${step} 注册失败（已降级，不阻断宿主）：${err instanceof Error ? err.message : String(err)}`;
     try {
-      c.logger?.warn?.(
-        `[concourse] 客户端 ${step} 注册失败（已降级，不阻断宿主）：${err instanceof Error ? err.message : String(err)}`,
-      );
+      if (c.logger?.warn !== undefined) c.logger.warn(message);
+      else if (typeof console !== 'undefined') console.warn(message);
     } catch {
-      // logger 自身失败也绝不外抛
+      // logger/console 自身失败也绝不外抛
     }
   };
 
@@ -81,6 +91,15 @@ export function apply(ctx?: unknown): void {
         kind: TAB_KIND,
         title: () => 'Concourse',
         priority: 'extension',
+        // 页面类型没有 patterns；guide 是右侧栏“添加标签”的可发现入口。
+        guide: [
+          {
+            id: 'panel',
+            order: 50,
+            title: () => 'Concourse',
+            description: () => '拓扑、任务与待决事项',
+          },
+        ],
       });
     if (typeof c.effect === 'function') c.effect(registerTab);
     else registerTab();
@@ -104,5 +123,31 @@ export function apply(ctx?: unknown): void {
     });
   } catch (err) {
     warn('面板体', err);
+  }
+
+  // 阶段 3：会话挂载时自动打开一次面板（每个 session 一次；用户关闭后不抢回）。
+  const sidebarRight = c.sidebarRight;
+  if (sidebarRight?.openTab === undefined || sidebarRight.mounted === undefined) return;
+  try {
+    const opened = new Set<string>();
+    const openForMounted = (): void => {
+      const sessionId = sidebarRight.mounted?.getSnapshot();
+      if (typeof sessionId !== 'string' || opened.has(sessionId)) return;
+      opened.add(sessionId);
+      try {
+        sidebarRight.openTab?.(TAB_KIND);
+      } catch (err) {
+        warn('面板打开', err);
+      }
+    };
+    const installSubscription = (): (() => void) => {
+      const unsubscribe = sidebarRight.mounted?.subscribe(openForMounted) ?? (() => undefined);
+      openForMounted();
+      return unsubscribe;
+    };
+    if (typeof c.effect === 'function') c.effect(installSubscription);
+    else installSubscription();
+  } catch (err) {
+    warn('面板订阅', err);
   }
 }

@@ -18,8 +18,8 @@ function strictRegisterSlot(
 }
 
 describe('client/index apply', () => {
-  it('声明 cordis inject：sidebarRightTabs + slots', () => {
-    expect(inject).toEqual(['sidebarRightTabs', 'slots']);
+  it('声明 cordis inject：sidebarRightTabs + slots + sidebarRight', () => {
+    expect(inject).toEqual(['sidebarRightTabs', 'slots', 'sidebarRight']);
     expect(name).toBe('dsh-agent-teams-concourse-client');
   });
 
@@ -28,37 +28,64 @@ describe('client/index apply', () => {
     const registerTab = vi.fn((_definition: unknown) => tabDisposer);
     const slotDisposer = vi.fn();
     const registerSlot = vi.fn((_definition: unknown, _component: unknown) => slotDisposer);
-    let effectCleanup: unknown;
+    const cleanups: unknown[] = [];
     const effect = vi.fn((fn: () => unknown) => {
-      effectCleanup = fn();
-      return effectCleanup;
+      const cleanup = fn();
+      cleanups.push(cleanup);
+      return cleanup;
     });
     const injectSlot = vi.fn((slotName: string, factory: () => unknown) => {
       factory();
       return undefined;
     });
+    const unsubscribe = vi.fn();
+    const subscribe = vi.fn(() => unsubscribe);
+    const openTab = vi.fn();
+    const sidebarRight = {
+      openTab,
+      mounted: {
+        getSnapshot: () => 'session-1',
+        subscribe,
+      },
+    };
 
     apply({
       effect,
       sidebarRightTabs: { register: registerTab },
       slots: { inject: injectSlot, register: registerSlot },
+      sidebarRight,
     });
 
-    // 页型定义由 effect 托管，卸载时调用 disposer。
-    expect(effect).toHaveBeenCalledTimes(1);
+    // 页型与自动打开订阅各自由 effect 托管，卸载时调用 disposer。
+    expect(effect).toHaveBeenCalledTimes(2);
     expect(registerTab).toHaveBeenCalledTimes(1);
+    expect(subscribe).toHaveBeenCalledTimes(1);
+    expect(openTab).toHaveBeenCalledWith(TAB_KIND);
     const definition = registerTab.mock.calls[0]?.[0] as {
       id: string;
       kind: string;
       title: (address: string) => string;
+      guide?: Array<{
+        id: string;
+        order: number;
+        title: () => string;
+        description?: () => string;
+      }>;
     };
     expect(definition.id).toBe(TAB_DEFINITION_ID);
     expect(definition.kind).toBe(TAB_KIND);
     expect(typeof definition.title).toBe('function');
     expect(definition.title('sidebar://concourse')).toContain('Concourse');
-    if (typeof effectCleanup !== 'function') throw new Error('effect 未返回 disposer');
-    (effectCleanup as () => void)();
+    // 没有 guide 条目时，右侧栏“添加标签”无法发现这个页面类型。
+    expect(definition.guide).toHaveLength(1);
+    expect(definition.guide?.[0]).toMatchObject({ id: 'panel', order: 50 });
+    expect(definition.guide?.[0]?.title()).toContain('Concourse');
+    expect(definition.guide?.[0]?.description?.()).toBeTruthy();
+    for (const cleanup of cleanups) {
+      if (typeof cleanup === 'function') (cleanup as () => void)();
+    }
     expect(tabDisposer).toHaveBeenCalledTimes(1);
+    expect(unsubscribe).toHaveBeenCalledTimes(1);
 
     // keyed slot：必须传 key，不得沿用页型的 id 字段。
     expect(injectSlot).toHaveBeenCalledWith('sidebar.right.pane.tab', expect.any(Function));
@@ -67,6 +94,35 @@ describe('client/index apply', () => {
     expect(slotDef.name).toBe('sidebar.right.pane.tab');
     expect(slotDef.key).toBe(TAB_DEFINITION_ID);
     expect(slotDef.id).toBeUndefined();
+  });
+
+  it('自动打开只对每个已挂载会话执行一次；用户关闭后不反复抢回', () => {
+    const openTab = vi.fn();
+    const unsub = vi.fn();
+    let listener: (() => void) | undefined;
+    let sessionId: string | undefined = 'session-a';
+    const subscribe = vi.fn((fn: () => void) => {
+      listener = fn;
+      return unsub;
+    });
+    apply({
+      sidebarRightTabs: { register: vi.fn() },
+      slots: { inject: (_name: string, factory: () => unknown) => factory(), register: vi.fn() },
+      sidebarRight: {
+        openTab,
+        mounted: { getSnapshot: () => sessionId, subscribe },
+      },
+    });
+    expect(openTab).toHaveBeenCalledTimes(1);
+    sessionId = undefined;
+    listener?.();
+    expect(openTab).toHaveBeenCalledTimes(1);
+    sessionId = 'session-a';
+    listener?.();
+    expect(openTab).toHaveBeenCalledTimes(1);
+    sessionId = 'session-b';
+    listener?.();
+    expect(openTab).toHaveBeenCalledTimes(2);
   });
 
   it('严格 keyed 契约：缺 key 的注册会被拒绝，因此实现不得再传 id', () => {

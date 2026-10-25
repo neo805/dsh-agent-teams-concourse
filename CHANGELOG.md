@@ -3,6 +3,22 @@
 本项目遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/) 与
 [语义化版本](https://semver.org/lang/zh-CN/)。版本变更须在此登记。
 
+## [0.2.1-rc.4] — 2026-10-25 · 侧栏可发现性与自动打开
+
+### Added
+
+- 右侧栏页型定义补充 `guide` 条目（id `panel`、order 50），使“添加标签/guide”能发现 Concourse。
+- 客户端在会话挂载时自动打开一次 Concourse tab（每个 session 一次；用户关闭后不反复抢回）。
+- 客户端注册失败在没有宿主 logger 时回退到 `console.warn`，不再静默吞掉装配错误。
+
+### Changed
+
+- `client.inject` 增加 `sidebarRight`；无该服务时仍可完成类型/body 注册但不自动打开。
+
+### Fixed
+
+- 仅注册类型与 keyed body 不会让右侧栏出现页面类型；这是 Web 视觉验收“无 Concourse 标签”的根因。
+
 ## [0.2.1-rc.3] — 2026-10-25 · 契约、通信与回放一致性硬化
 
 ### Added
@@ -35,7 +51,7 @@
 ### Known limits
 
 - 审批中断的完整恢复、post-delivery 写盘失败、dedup/admission 重启回放、`team_plan` 部分成功与 torn-tail 策略仍未实现；登记于开发计划 §9，需另立事务/恢复协议。本轮不宣称 exactly-once 或完整崩溃恢复。
-- Web 核心链路已在 `conc03` scratch profile 实机验证；Desktop profile 已安装 rc.3 并启用配置，但需重启后由出品人验收 Concourse tab 的真实视觉与交互。客户端 slot 已由严格契约测试、pack-smoke 与当前 slot 契约 Inspect 覆盖。
+- Web 核心链路已在 `conc03` scratch profile 实机验证；`web` 与 Desktop profile 均已安装 rc.4 并启用配置，但都需重启后由出品人验收 Concourse tab 的真实视觉与交互。客户端 slot、guide 入口与一次性自动打开由严格契约测试和 pack-smoke 覆盖。
 
 ## [0.2.1-rc.2] — 2026-10-25 · 通信与状态可信性
 
