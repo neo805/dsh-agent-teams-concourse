@@ -83,9 +83,9 @@ machine-specific information.
 
 ## 2. 版本号治理
 
-版本号形如 `X.X.X-rc.X`。**本项目当前版本 `0.2.1-rc.5`**；**所有新版本号一律带
+版本号形如 `X.X.X-rc.X`。**本项目当前版本 `0.2.1-rc.6`**；**所有新版本号一律带
 `rc` 后缀**（`package.json`、`CHANGELOG.md` 标题、README 首屏、git tag 一律一致）。
-下一版本候选：`0.2.1-rc.6`（修 bug / 文档）或 `0.3.0-rc.1`（探针功能，需出品人批准第二位）。
+下一版本候选：`0.3.0-rc.1`（探针功能，需出品人批准第二位）。
 
 | 情形 | 做法 | 示例 |
 |---|---|---|
@@ -117,11 +117,11 @@ machine-specific information.
 - **所有 bug 修复**必须先补一个能复现该 bug 的回归测试，再修。
 - 测试命令固定：
   - 单测：`pnpm test`（`vitest run`，include `test/**/*.test.ts(x)`）
-  - 全门禁：`pnpm verify`（build + typecheck + lint + boundaries + assets + coverage + pack-smoke）
+  - 全门禁：`pnpm verify`（typecheck → lint → boundaries → coverage（globalSetup 唯一构建）→ assets → pack-smoke）
 - **覆盖率阈值是全局 90%**（lines / branches / functions / statements）。
   设计上的按层阈值（kernel ≥90 / service ≥80 / host ≥70 / client ≥60）尚未在
   `vitest.config.ts` 启用，列为技术债 T-9。
-- 报告里给出通过数与覆盖率；**测试基线 58 文件 / 448 测试**（2026-10-25 实测），
+- 报告里给出通过数与覆盖率；**测试基线 60 文件 / 456 测试**（2026-10-25 rc.6 实测），
   数字变化时同步更新到本文件 §8 与开发计划，不让它变成过时数字。
 - 纯文档、纯配置变更可豁免测试先行，但必须在交付报告里写明豁免理由。
 - 覆盖率不是目标：**不为凑数字写造作测试**。不可达的防御分支允许留空，但要在报告里点名。

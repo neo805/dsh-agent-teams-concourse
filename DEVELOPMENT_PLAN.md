@@ -2,12 +2,12 @@
 
 |  |  |
 | --- | --- |
-| 计划版本 | **v2.3**（2026-10-25）· 取代 v2.2（2026-10-25） |
+| 计划版本 | **v2.5**（2026-10-25）· 取代 v2.4（2026-10-25） |
 | 需求依据 | `docs/REQUIREMENTS.html` v2.0（唯一需求依据） |
 | 协作规范 | `COLLABORATION.md` v2.0（角色、版本、验证阶梯、交付清单） |
 | 输入 | 两份调研底稿（`docs/*-report.html`）· 13 份 research 底稿 · P0–P4 开发会话与真机测试记录 · 第 4–7 期第三方全景审计（2026-10-25） |
-| 当前版本 | `0.2.1-rc.5`（0.1.0 = MVP 出口；0.2.0 = 运行时适配 + 真机 6 问题修复；0.2.1-rc.2 = T0–T4 可信性修复；rc.3 = 契约/通信/回放一致性硬化；rc.4 = 侧栏可发现性与自动打开；rc.5 = 通信/路由/UI 身份正确性与工程门禁加固） |
-| 基线环境 | DSH `0.2.1-rc.2` · Node `^22.19 || >=24` · pnpm 11.7 · 测试 **58 文件 / 448 测试** |
+| 当前版本 | `0.2.1-rc.6`（0.1.0 = MVP 出口；0.2.0 = 运行时适配 + 真机 6 问题修复；0.2.1-rc.2 = T0–T4 可信性修复；rc.3 = 契约/通信/回放一致性硬化；rc.4 = 侧栏可发现性与自动打开；rc.5 = 通信/路由/UI 身份正确性与工程门禁加固；rc.6 = 硬化出口 + H3.0 协议） |
+| 基线环境 | DSH `0.2.1-rc.2` · Node `^22.19 || >=24` · pnpm 11.7 · 测试 **60 文件 / 456 测试** |
 | 目标仓库 | `neo805/dsh-agent-teams-concourse`（Public + MIT，**尚未建仓；建仓与首推须出品人批准**） |
 
 ---
@@ -28,7 +28,7 @@
 | **H1** | **通信与状态可信性**（T0–T4） | `0.2.1-rc.2` | ✅ 代码/单测完成，Web 实机部分通过 | 真实路径矩阵 + 恢复/原子性断言 |
 | **H2** | **契约、通信与回放一致性硬化 + 侧栏可发现性** | `0.2.1-rc.4` | ✅ 已完成 | 417 测试 + 严格门禁 + Web 实机 |
 | **H2.5** | **通信/路由/UI 身份正确性与工程门禁加固** | `0.2.1-rc.5` | ✅ 出品人验收通过 | 448 测试 + pack/plugin 自查 + Web/Desktop 实机验收 |
-| **H2.6 / H3.0** | **硬化出口：协议先行 + 不变量测试 + 限流/契约收口** | `0.2.1-rc.6` | ⬜ 下一阶段 | H3 ADR + 模型/对拍测试 + RateLimiter 有界化 + 全验证阶梯 |
+| **H2.6 / H3.0** | **硬化出口：协议先行 + 不变量测试 + 限流/契约收口** | `0.2.1-rc.6` | 🟨 代码/单测/全门禁/Web 实机完成；Desktop 已装 disabled，待出品人验收 | H3 ADR + 模型/对拍测试 + RateLimiter 有界化 + 全验证阶梯 |
 | **P5** | **旁路探针 MVP**（隔离 / 摘要 / 句柄 / 回注档） | `0.3.0-rc.1`？ | ⬜ 待 H2.6 与版本批准 | AC-1 / AC-2 / AC-3；不另建事务路径 |
 | **H3.1** | **事务/恢复实现与故障注入** | `0.3.x-rc.N` | ⬜ 待 P5 | 崩溃窗口对账 + live/replay 等价 + torn-tail 策略 |
 | **P6** | **探针生命周期**（七状态 / 四级丢弃 / 遮蔽 / 晋升） | `0.3.x-rc.N` | ⬜ 待 H3.1 | AC-4 / AC-5 |
@@ -106,6 +106,18 @@ P0──P1──P2──P3──P4──[0.1.0 MVP]──[0.2.0 运行时适配]
 | **RC6-6** | 更新版本、CHANGELOG、双语 README、测试基线与残留表；同步 rc.5 已验收事实和本计划的 H3.0/H3.1 分工，随后执行完整验证阶梯。 | `pnpm verify` 全绿、四项覆盖率 ≥90%、语料不回退；pack/plugin 自查、Web 实机通过，Desktop 安装后保持 `disabled` 交出验收。不得补写无法复核的实机证据。 |
 
 **出口标准**：RC6-1…RC6-6 全部完成；H3.0 仅承诺协议与当前行为可信性，不把 ADR 当成恢复实现。验收后冻结本轮硬化范围，直接申请 P5 / `0.3.0-rc.1` 的第二位版本号批准。
+
+**验证记录（2026-10-25）**：
+
+- 首个测试提交红灯：`4 failed / 22 passed`（React 主版本、verify 双构建/顺序、RateLimiter 10,000 戳无界）。
+- `pnpm verify`：**60 文件 / 456 测试全绿**；coverage statements/lines `98.42%`、branches `90.92%`、functions `99.09%`。
+- 单次构建已证实：verify 输出只有 `test:coverage` 内的 globalSetup 一轮 tsdown；pack-smoke 与零资产通过。
+- H3 ADR：`docs/decisions/D-H3-transaction-recovery.md`；仅协议，不宣称崩溃恢复。
+- Web profile：rc.6 安装 17/17 文件 SHA-256 一致；`--dump-config` 退出 0，concourse 行启用；裸 import `apply`/`inject` 正常。
+- Web 实机（`session-446b9632-edeb-4d82-900d-75c83aefb18b`，port 53179）：六步 `team_plan → team_assign → team_send → team_link(close) → team_send(reject) → team_status` 完成；child `1ed49c98-b967-49d5-9049-9677f087fe35`；台账 13 条，`deliver=2`、`reject=1(EDGE_CLOSED)`，预算先后 3/86 tokens 各扣一次；文件 SHA-256 `6E29E5CF…A9325`、2909 bytes。最终 child 应答已回到 lead。
+- `plugin_check --profile web` 仅报告既有 `dsh-excel-chat` 的 npm 版本依赖问题；concourse 未报问题。
+- Desktop：`plugin_manager` 从最终 tarball 安装 rc.6，17/17 文件哈希一致；`include:concourse` 最终 `enabled:false`、`fiberPhase:null`，patch 为 `disabled:true`。未重启 Desktop，视觉/功能验收留给出品人。
+- 标准 tarball 与安装专用 tarball SHA-256 同为 `DC1E8CDA…F073F863`；安装专用副本仅用于绕过 pnpm 同路径同版本不刷新文件的限制，内容完全一致。
 
 **明确不进入本阶段**：Catalog 有界并发、AgentDirectory、suggest/validate/UI 投影线性化、mock fixture 合并、测试专用导出删除、发布物裁剪。它们分别等待基准证据、P7/P8 或 P9，不再成为 P5 前置条件。
 
@@ -285,7 +297,7 @@ P0──P1──P2──P3──P4──[0.1.0 MVP]──[0.2.0 运行时适配]
 | **T-9** | 覆盖率按层阈值未启用 | 仍是全局 90% | 与 §3.2 表不一致 | P9 |
 | **T-10** | 静默判定（quiescence）缺失 | 无模块 | 无法终止"礼貌性互推" | P7 |
 | **T-11** | 事务/恢复协议未完成（approve 中断、post-delivery 写盘、dedup/admission replay、torn-tail） | 仅局部止损/登记 | 崩溃窗口可能双活、重复或假失败 | H3.0 / rc.6 先成文，H3.1 在 P5 后实现 |
-| **T-12** | React 18.3.1 运行时搭配 `@types/react(-dom)` 19.x | 类型契约与运行时不一致 | 后续 UI 可能按新 API 通过类型检查却在旧运行时失败 | RC6-4，先加主版本一致断言 |
+| **T-12** | React 18.3.1 运行时搭配 `@types/react(-dom)` 19.x | ✅ 已由 RC6-4 对齐 18.x | 后续 UI 可能按新 API 通过类型检查却在旧运行时失败 | 已解决；主版本一致断言守护 |
 | **T-13** | `./client` 的 types 指向仅含 `export {}` 的 `dist/client/index.d.cts` | 宿主装载不受影响，TS 消费契约无效 | pack 存在性检查不能发现空声明 | P9 增加消费包 + tsc 冒烟并修 dts 或移除误导 types 条件 |
 | **T-14** | `withEdgeBudgets` 对同 key 改预算仍保留旧 remaining/fuse | 当前 `team_link` 不改预算，属未来改预算隐患 | 新预算可能与余额/熔断状态矛盾 | P7 先定义重基或重置语义，再做 live/replay 对等测试 |
 
@@ -391,7 +403,7 @@ dsh-agent-teams-concourse/
 | `0.2.1-rc.3` | 契约、通信与回放一致性硬化；恢复协议登记为后续设计 | 不需要（第三位） |
 | `0.2.1-rc.4` | 侧栏 guide 入口 + 会话挂载自动打开；浏览器 warning 兜底 | 不需要（第三位） |
 | `0.2.1-rc.5` | 通信/路由/UI 身份正确性、单一校验管线、AST 边界与发布/测试门禁加固；出品人已验收 | — |
-| `0.2.1-rc.6` | H3.0 协议、不变量测试、RateLimiter 有界化与工程契约收口；最后一轮硬化 | 不需要（仅递增 rc） |
+| `0.2.1-rc.6` | H3.0 协议、不变量测试、RateLimiter 有界化与工程契约收口；最后一轮硬化；施工完成待验收 | 不需要（仅递增 rc） |
 | `0.3.0-rc.1` | P5 探针 MVP | **需要**（动第二位） |
 | `0.3.x-rc.N` | H3.1 事务/恢复实现，随后 P6 修正与遮蔽降级 | 不需要 |
 | `0.4.0-rc.1` | P7 + P8 | **需要** |

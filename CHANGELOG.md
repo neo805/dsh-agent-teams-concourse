@@ -3,6 +3,32 @@
 本项目遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/) 与
 [语义化版本](https://semver.org/lang/zh-CN/)。版本变更须在此登记。
 
+## [0.2.1-rc.6] — 2026-10-25 · 硬化出口与 H3.0 协议
+
+### Added
+
+- `docs/decisions/D-H3-transaction-recovery.md`：定义 admission/回执/预算预留、`PUBLICATION_UNKNOWN`、崩溃窗口对账、torn-tail、approve 中断与 P5 约束；H3.1 实现前不宣称完整恢复。
+- RateLimiter 旧实现参考对拍、dedup 穷举单射、当前 live/replay 协议模型，以及 `verify` 构建单一权威的门禁测试。
+- 「防止同族窄化循环」规则：复核上轮修复、不变量优先、门禁 known-bad fixture、不以 xfail 充当出口。
+
+### Changed
+
+- RateLimiter 只保留至多 `n` 个判决所需时间戳并维护不可逆剔除水位；显式 `at` 回退、degrade 计戳与预检不消费语义保持不变，连续降级不再积累全历史。
+- `@types/react` / `@types/react-dom` 对齐 React 18.x 运行时；新增主版本一致断言，不改变运行时。
+- `pnpm verify` 不再在测试前预构建：顺序为静态检查 → `test:coverage`（globalSetup 唯一构建）→ assets → pack-smoke。
+
+### Fixed
+
+- 连续降级下限流窗口无界增长及每消息全窗口扫描。
+- React 18 运行时与 React 19 类型契约漂移。
+- `verify` 每次执行重复完整构建。
+
+### Known limits
+
+- H3.1 的崩溃恢复、票据重放、torn-tail 隔离仍只成文未实现；`PUBLICATION_UNKNOWN` 不自动重发。
+- Catalog 并发、AgentDirectory、suggest/validate/UI 投影、mock fixture 合并与空客户端 dts 按计划留待 P7/P8/P9。
+- rc.5 的面板数据桥、PlanCard 挂载、逐顶点工具分流等已知残留不变。
+
 ## [0.2.1-rc.5] — 2026-10-25 · 通信正确性、路由与门禁加固
 
 ### Changed
