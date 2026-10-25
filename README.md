@@ -2,7 +2,7 @@
 
 English | [中文](README.zh.md)
 
-**Version:** `0.2.1-rc.4` (DSH baseline `0.2.1-rc.2`; contract, communication and replay hardening + sidebar discoverability; Web core loop verified, UI visual/Desktop acceptance pending) · [Changelog](CHANGELOG.md) · [Requirements](docs/REQUIREMENTS.html) · [Plan](DEVELOPMENT_PLAN.md) · [Collaboration norms](COLLABORATION.md)
+**Version:** `0.2.1-rc.5` (DSH baseline `0.2.1-rc.2`; communication correctness, provider routing, UI identity mapping and build-gate hardening; Web core loop from rc.4 retained, rc.5 real-machine acceptance pending) · [Changelog](CHANGELOG.md) · [Requirements](docs/REQUIREMENTS.html) · [Plan](DEVELOPMENT_PLAN.md) · [Collaboration norms](COLLABORATION.md)
 
 The **organizational layer** for DSH: it turns "who may talk to whom, which model and
 reasoning effort each execution unit gets, and how a product finds its way back to the
@@ -12,7 +12,8 @@ of it; a multi-level tree is therefore a view, and **the execution substrate sta
 one level deep**. Zero art assets: shape carries the semantics, colour only speeds up scanning.
 
 > **Work in progress.** This is `0.2.x`: the team layer (topology, per-vertex model
-> assignment, communication gates, plan card) works today; the **side-inquiry probe**
+> assignment, communication gates, plan tools) works today; the right-sidebar panel is
+> still a placeholder. The **side-inquiry probe**
 > (isolated, not echoed back, retrievable by handle, discardable) is the next stage and
 > **not a single line of it exists yet**. The table below is the honest state, not the
 > aspiration.
@@ -22,25 +23,27 @@ one level deep**. Zero art assets: shape carries the semantics, colour only spee
 | Area | State |
 |---|---|
 | Topology as data: `team_topology` declares vertices + open edges; tier classification (T0/T1a/T1b/T1.5/T2a); plan-time capacity and budget validation | ✅ |
-| Per-vertex assignment: `model` / `reasoningEffort` / `budget` / `toolFilter` / `maxDepth`, fail-loud when out of range | ✅ |
+| Per-vertex assignment: `provider` / `model` / `reasoningEffort` / `budget` / `toolFilter` / `maxDepth`, fail-loud when out of range | ✅ |
 | Auto-assignment suggestions (heuristic, with `rationale[]` / `signals[]` / `confidence`) | ✅ |
 | Hard communication constraints: deny-by-default open edge set, `wake` defaults to never, hop TTL, idempotent dedup, rate degradation, per-edge and global budget fuses | ✅ |
 | **Model-admission authoritative gate** + real-path matrix (tool / `agent-message` / forged sender; closed-edge messages never enter the model) | ✅ |
 | Single plan-approval gate (`team_plan` submits and does not spawn); zero team-building approvals at runtime | ✅ |
 | JSONL ledger (decisions / comms / budget / echo counts) + replay on restart (seq and runtime edge changes replay; offline targets fail loud) | ✅ |
-| Right-sidebar panel and plan card: components and tests complete, **but the data bridge is not wired — the panel renders a placeholder today** | ⚠️ |
+| Right-sidebar panel: component/tests complete, **but the data bridge is not wired — it renders a placeholder today**. `PlanCard` is test-only and not mounted yet | ⚠️ |
 | Side-inquiry probe (`team_probe` / `team_peek`, `echo: handle` + `tick` notification) | ⏳ planned (P5) |
 | Four-level discard / shadowing / promotion to member | ⏳ planned (P6) |
 | Session join and T2a peer leaders (`team_join`) | ⏳ planned (P8) |
 
 Real-machine smoke for T1a (star) and T1b (multi-level tree) has been run on a scratch
 profile (during `0.1.0`), and the verbatim closed-edge rejection is on record; `0.2.0` was
-installed into a Web profile and passed its health check. `0.2.1-rc.4` fixes the client
-keyed-slot contract, adds the sidebar guide entry and one-shot auto-open, and keeps the
+installed into a Web profile and passed its health check. `0.2.1-rc.4` fixed the client
+keyed-slot contract, added the sidebar guide entry and one-shot auto-open, and kept the
 rc.3 communication/replay hardening. Its core Web loop was verified on a scratch `conc03`
 profile: plan → assign → deliver → edge close/reject → reopen, plus restart replay with
-identical state and invalid-model preflight with zero starts. UI visual acceptance after
-the rc.4 host restart remains pending and is not presented as verified.
+identical state and invalid-model preflight with zero starts. `0.2.1-rc.5` fixes
+collision-safe dedup, edge-fuse recovery, `hopTTL` validation, provider routing, tool-group
+rollback and UI identity mapping, and hardens the boundary/package/test gates. Its rc.5
+real-machine acceptance remains pending and is not presented as verified.
 
 ## Requirements
 
@@ -59,7 +62,7 @@ pnpm verify
 pnpm pack
 
 # 2) install into a profile, then **fully restart** the host (host plugins load at startup only)
-dsh plugin --profile <profile> add <path-to>\dsh-agent-teams-concourse-0.2.1-rc.4.tgz
+dsh plugin --profile <profile> add <path-to>\dsh-agent-teams-concourse-0.2.1-rc.5.tgz
 ```
 
 Enable it in that profile's `cordis.patch.yml` (lazy by default):

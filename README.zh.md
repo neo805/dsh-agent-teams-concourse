@@ -2,14 +2,14 @@
 
 [English](README.md) | 中文
 
-**版本：** `0.2.1-rc.4`（DSH 基线 `0.2.1-rc.2`；契约、通信与回放一致性硬化 + 侧栏可发现性修复，Web 核心链路已验证，UI 视觉/Desktop 重启验收待办）· [变更日志](CHANGELOG.md) · [需求文档](docs/REQUIREMENTS.html) · [开发计划](DEVELOPMENT_PLAN.md) · [协作规范](COLLABORATION.md)
+**版本：** `0.2.1-rc.5`（DSH 基线 `0.2.1-rc.2`；通信正确性、provider 路由、UI 身份映射与构建门禁加固，rc.4 Web 核心链路保留，rc.5 实机验收待办）· [变更日志](CHANGELOG.md) · [需求文档](docs/REQUIREMENTS.html) · [开发计划](DEVELOPMENT_PLAN.md) · [协作规范](COLLABORATION.md)
 
 DSH 的**组织层**插件：把「谁和谁能通信、每个执行单元用什么模型与思考强度、产出如何回到主线」
 变成可编辑的一等数据。拓扑不是搭出来的，是**剪**出来的——底座在物理上已是完全图，本插件在其上
 声明一个开放边集，于是多层树只是视图，**执行底座恒为一层**。零美术资产：形状承载语义，颜色只加速扫视。
 
-> **开发中。** 当前是 `0.2.x`：团队层（拓扑 / 逐顶点定档 / 通信闸门 / 计划卡）今天就能用；
-> **旁路探针**（不回注、按句柄取回、可丢弃的旁路查询）是下一阶段，**一行代码都还没有**。
+> **开发中。** 当前是 `0.2.x`：团队层（拓扑 / 逐顶点定档 / 通信闸门 / 计划工具）今天就能用；
+> 右侧栏面板仍是占位视图。**旁路探针**（不回注、按句柄取回、可丢弃的旁路查询）是下一阶段，**一行代码都还没有**。
 > 下表是诚实的现状，不是愿景。
 
 ## 今天能做什么
@@ -17,13 +17,13 @@ DSH 的**组织层**插件：把「谁和谁能通信、每个执行单元用什
 | 能力 | 状态 |
 |---|---|
 | 拓扑即数据：`team_topology` 声明顶点 + 开放边集；tier 判定（T0/T1a/T1b/T1.5/T2a）；计划期容量与预算校验 | ✅ |
-| 逐顶点定档：`model` / `reasoningEffort` / `budget` / `toolFilter` / `maxDepth`，越界 fail-loud | ✅ |
+| 逐顶点定档：`provider` / `model` / `reasoningEffort` / `budget` / `toolFilter` / `maxDepth`，越界 fail-loud | ✅ |
 | 自动定档建议（启发式，输出 `rationale[]` / `signals[]` / `confidence`） | ✅ |
 | 通信硬约束：开放边集 deny-by-default、`wake` 默认 never、跳数 TTL、幂等去重、速率降级、边/全局预算熔断 | ✅ |
 | **模型准入侧权威拦截** + 真实路径矩阵（工具 / `agent-message` / 伪造 sender，闭边消息不进入模型） | ✅ |
 | 计划审批闸门（`team_plan` 只提交不拉起），运行期零组队审批 | ✅ |
 | JSONL 台账（决策 / 通信 / 预算 / 回声计数）+ 重启回放恢复（seq 与运行期改边可回放；离线目标 fail-loud） | ✅ |
-| 右侧栏面板与计划卡：组件与测试齐全，**但数据桥未接线——面板今天是占位视图** | ⚠️ |
+| 右侧栏面板：组件与测试齐全，**但数据桥未接线——今天仍是占位视图**；`PlanCard` 尚未挂载 | ⚠️ |
 | 旁路探针（`team_probe` / `team_peek`，`echo: handle` + `tick` 通知） | ⏳ 计划中（P5） |
 | 四级丢弃 / 遮蔽 / 晋升为成员 | ⏳ 计划中（P6） |
 | 会话加入与 T2a 多领队并列（`team_join`） | ⏳ 计划中（P8） |
@@ -32,8 +32,9 @@ DSH 的**组织层**插件：把「谁和谁能通信、每个执行单元用什
 `0.2.0` 已装入 Web profile 并通过体检。`0.2.1-rc.4` 修复客户端 keyed slot 契约，
 增加侧栏 guide 入口与会话挂载时一次自动打开，并保留 rc.3 的通信/回放硬化。核心 Web
 链路已在最小 `conc03` scratch profile 验证：plan → assign → deliver → 闭边拒绝 →
-重开边；重启回放状态一致；非法 model 预检零拉起。重启 rc.4 宿主后的 UI 视觉验收仍待
-完成，不作为已验证。
+重开边；重启回放状态一致；非法 model 预检零拉起。`0.2.1-rc.5` 修复去重碰撞、
+熔断边恢复、`hopTTL` 校验、provider 路由、工具组回滚与 UI 身份映射，并加固边界/
+发布/测试门禁。rc.5 的实机验收仍待完成，不作为已验证。
 
 ## 前置条件
 
@@ -50,7 +51,7 @@ pnpm verify
 pnpm pack
 
 # 2) 装进某个 profile，然后**完全重启**宿主（宿主插件只在启动时加载）
-dsh plugin --profile <profile> add <path-to>\dsh-agent-teams-concourse-0.2.1-rc.4.tgz
+dsh plugin --profile <profile> add <path-to>\dsh-agent-teams-concourse-0.2.1-rc.5.tgz
 ```
 
 在该 profile 的 `cordis.patch.yml` 里打开它（缺省惰性）：

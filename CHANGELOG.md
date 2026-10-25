@@ -3,6 +3,32 @@
 本项目遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/) 与
 [语义化版本](https://semver.org/lang/zh-CN/)。版本变更须在此登记。
 
+## [0.2.1-rc.5] — 2026-10-25 · 通信正确性、路由与门禁加固
+
+### Changed
+
+- 逐顶点 `provider` 现在贯穿模型白名单预检、`VertexStart` 与宿主 `agentOptions`；同名模型跨 provider 时按显式路由判定，不再误用目录第一条。
+- `team_topology` 与 `team_plan/service.create` 共用唯一 `analyzeConcourse` 管线；未知字段键集直接从 Zod shape 派生，编辑距离与预算账本/估算各只有一个实现入口。
+- 工具组注册改为局部事务：中途失败时逆序撤销已注册工具，入口仍不抛出，也不留下半套 `team_*`。
+- `interrupt` 成功释放后清除 parent Agent 强引用，以有界 tombstone 保持重复调用幂等。
+- 边界门禁改用 TypeScript AST，覆盖 `require`/动态 import，未登记层默认拒绝；pack 冒烟只链接 manifest 声明的 dependencies + peerDependencies。
+- 零资产检查覆盖 `package.json` 的发布集合；pack 契约补客户端 `index.d.cts`；语料测试改由 Vitest globalSetup 每次调用构建一次，worker 不再并发写共享 `dist`。
+- 移除无消费方的 `@deepseek-ai/dsh-experimental-agent-team` peer/dev 依赖与 workspace 例外。
+
+### Fixed
+
+- 熔断边 close→open 后旧 fuse 残留：删除预算边时同步丢弃其熔断标记，live 与 replay 均可恢复投递。
+- `team_link` 接受 `hopTTL<=0`：开边现在写台账前复用 `Edge` schema 校验，返回 `INVALID_SPEC` 且拓扑不变。
+- 32 位内容摘要碰撞导致合法消息误判 `DUPLICATE`：去重身份改为完整无歧义 tuple，同一消息重放仍被拦截。
+- 拓扑树折叠标记按字符串子串误贴到兄弟顶点；树渲染新增结构化行并按顶点 id 关联，`__proto__` 状态不再丢失。
+- 计划卡通信边 React key 改用无歧义有向 tuple framing。
+
+### Known limits
+
+- 去重/admission 的容量与持久化窗口、成功发送的三次同步 JSONL 写、启动全事件深拷贝仍留待 H3 事务/快照协议处理。
+- 模型目录独立异步枚举仍为串行；按上限并发与 `AgentDirectory` 身份索引随 P7/P8 处理。
+- 面板数据桥仍未接线，`PlanCard` 尚无运行期挂载入口；无回调动作仍会渲染为可点击，随 P7 一并接线。
+
 ## [0.2.1-rc.4] — 2026-10-25 · 侧栏可发现性与自动打开
 
 ### Added
