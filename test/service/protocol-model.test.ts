@@ -9,7 +9,7 @@ import { describe, expect, it } from 'vitest';
 import { ConcourseService } from '../../src/service/concourse.js';
 import { Ledger, type LedgerEvent } from '../../src/service/ledger.js';
 import { createMemoryStore, replay, type ReplayState } from '../../src/service/persistence.js';
-import { StubSubstrate, fakeClock, manualClock } from './helpers.js';
+import { StubSubstrate, manualClock } from './helpers.js';
 import { ROOT_AGENT_ID, SAMPLE_SPEC } from '../tools/helpers.js';
 
 function summary(state: ReplayState) {
