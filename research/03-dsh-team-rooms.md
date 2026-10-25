@@ -1,7 +1,7 @@
 # dsh-team-rooms v1.0.4 深度逆向调研报告
 
 > 调研对象：本机已安装插件 `dsh-team-rooms@1.0.4`
-> 路径：`C:\Users\KEI.NEO\.dsh\profiles\web\node_modules\dsh-team-rooms\`
+> 路径：`$DSH_HOME\profiles\web\node_modules\dsh-team-rooms\`
 > 方法：精读 `src/` TypeScript 源码（优先于 `lib/`）、`ARCHITECTURE.md`、`README*.md`、`cordis.patch.yml`、`package.json`、`lib/types/**/*.d.ts`，并对本机**真实运行数据**（存储域、投影缓存、profile 配置）做实证校验。
 > 证据标注：`文件:行号`。凡无法从代码或本机数据确证的，一律写"**未确认**"。
 >
@@ -183,7 +183,7 @@ export const teamRoomsDomainSpec = defineDomain({
 **实测文件布局**（本机真实数据，非文档推断）：
 
 ```
-C:\Users\KEI.NEO\.dsh\storages\team_rooms.json          (913,738 bytes)
+$DSH_HOME\storages\team_rooms.json          (913,738 bytes)
 {
   "unit":   { "name": "team_rooms", "version": 1 },
   "global": null,
@@ -235,7 +235,7 @@ const isRecipient = message.toSessionId === undefined
   : member.sessionId === message.toSessionId       // 定向：只发目标
 ```
 
-**两类唤醒的语义差别**（决定性证据来自 DSH 宿主 API 类型声明，`C:\Users\KEI.NEO\.dsh\profiles\node_modules\@deepseek-ai\dsh-agent\lib\types\runtime-types.d.ts`）：
+**两类唤醒的语义差别**（决定性证据来自 DSH 宿主 API 类型声明，`$DSH_HOME\profiles\node_modules\@deepseek-ai\dsh-agent\lib\types\runtime-types.d.ts`）：
 
 | API | 宿主文档原文 | 行号 | 效果 |
 |---|---|---|---|
@@ -323,8 +323,8 @@ export const teamRoomProjectionDefinition = {
 - 被禁时：事实交给 fallback（logger/panel 通道），**不写会话日志**（`facts.ts:66-68, 77-91`）；不可标记时：跳过追加并给一次性警告（`facts.ts:93-106`）；未知版本：先追加一次再探测返回信封（`facts.ts:108-117`）。
 - `allowUnmarkedFacts: true` 可强行回写——**故意危险**（`facts.ts:16-18`；`index.ts:86-95`）。
 
-> **本机实测结论（重要）**：本 profile 安装的 `@deepseek-ai/dsh-session` 版本是 **`0.2.0-rc.2`**（实测 `C:\Users\KEI.NEO\.dsh\profiles\node_modules\@deepseek-ai\dsh-session\package.json`）。代入 `factEventPolicyForVersion`：major=0、minor=2 → `minor > 1` 成立 → **`'forbidden'`**。因此在本部署上**所有 `team-room/fact` 都改走 logger fallback，从不写入会话日志**，`teamRoom` 投影**永远是空折叠**。
-> 实证：`dict_maintenance` 房间的 4 个真实成员，其投影缓存里的 `teamRoom` 值全部是 `{"ver":1, "seq":<n>, "val":{"rooms":[]}}`（文件 `C:\Users\KEI.NEO\.dsh\storages\session_projcache\sessions\session-3f783d79-*.json`、`session-77778b0a-*.json`、`session-82c262c6-*.json`、`session-945d030b-*.json`）。
+> **本机实测结论（重要）**：本 profile 安装的 `@deepseek-ai/dsh-session` 版本是 **`0.2.0-rc.2`**（实测 `$DSH_HOME\profiles\node_modules\@deepseek-ai\dsh-session\package.json`）。代入 `factEventPolicyForVersion`：major=0、minor=2 → `minor > 1` 成立 → **`'forbidden'`**。因此在本部署上**所有 `team-room/fact` 都改走 logger fallback，从不写入会话日志**，`teamRoom` 投影**永远是空折叠**。
+> 实证：`dict_maintenance` 房间的 4 个真实成员，其投影缓存里的 `teamRoom` 值全部是 `{"ver":1, "seq":<n>, "val":{"rooms":[]}}`（文件 `$DSH_HOME\storages\session_projcache\sessions\session-3f783d79-*.json`、`session-77778b0a-*.json`、`session-82c262c6-*.json`、`session-945d030b-*.json`）。
 > **产品含义**：在 ≥0.1.2-alpha.1 的宿主上，**"Web 设置页"这条产品面实质失效**（面板读不到任何房间），而 `/room` 命令与八个 `room_*` 工具完全正常。README 也承认这一点（`README-zh.md:32`），但"网页设置页"仍被列为四大能力之一（`README-zh.md:50`）——这是一个**文档与实际行为之间的落差**。
 
 ---
@@ -703,7 +703,7 @@ if (outcome !== 'allowed-once') {
 2. **故意没有 `provider` 键**：那个键属于 `dsh-background-agents`（它用来说明 `background_agent` 工具启动子代理时用哪个 provider）；**团队房间从不 spawn 子代理**（`cordis.patch.yml:12-15`）。
 3. 限流/配额式调优的正确做法是**覆盖 `team-rooms` 这一行**（`cordis.patch.yml:17`）。
 
-**本机实测**：`C:\Users\KEI.NEO\.dsh\profiles\web\package.json` 里 `"dsh-team-rooms": "^1.0.4"`（第 21 行），并在 `dsh.profile.bundles` 中列为第 15 个 bundle（第 42 行）；本 profile 的 `cordis.patch.yml` 里**没有** `team-rooms` 覆盖行（实测 `Test-Path`/文本搜索均未命中）。⇒ **本机运行在全部 schema 默认值下**，这一点也被存储观测印证（189 条未修剪 < `busRetention` 200，§附录 A）。
+**本机实测**：`$DSH_HOME\profiles\web\package.json` 里 `"dsh-team-rooms": "^1.0.4"`（第 21 行），并在 `dsh.profile.bundles` 中列为第 15 个 bundle（第 42 行）；本 profile 的 `cordis.patch.yml` 里**没有** `team-rooms` 覆盖行（实测 `Test-Path`/文本搜索均未命中）。⇒ **本机运行在全部 schema 默认值下**，这一点也被存储观测印证（189 条未修剪 < `busRetention` 200，§附录 A）。
 
 ---
 
@@ -815,7 +815,7 @@ if (outcome !== 'allowed-once') {
 | 项 | 实测值 |
 |---|---|
 | 后端 | **JSON 文件后端** |
-| 文件 | `C:\Users\KEI.NEO\.dsh\storages\team_rooms.json`（913,738 bytes） |
+| 文件 | `$DSH_HOME\storages\team_rooms.json`（913,738 bytes） |
 | 顶层结构 | `{ "unit": {"name":"team_rooms","version":1}, "global": null, "tables": { rooms, bus, tasks, timeline } }` |
 | rooms 键 | `<roomId>`（UUID） |
 | bus 键 | `` `<roomId>/<seq>` ``（例：`1e76df74-…/0`） |
@@ -853,17 +853,17 @@ if (outcome !== 'allowed-once') {
 
 ### A.3 `teamRoom` 投影在本部署上为空折叠
 
-- 本机 `@deepseek-ai/dsh-session` 版本：**`0.2.0-rc.2`**（`C:\Users\KEI.NEO\.dsh\profiles\node_modules\@deepseek-ai\dsh-session\package.json`）。
+- 本机 `@deepseek-ai/dsh-session` 版本：**`0.2.0-rc.2`**（`$DSH_HOME\profiles\node_modules\@deepseek-ai\dsh-session\package.json`）。
 - 代入 `factEventPolicyForVersion`（`audit.ts:105-112`）：major=0、minor=2 → `minor > 1` → **`'forbidden'`**。
 - ⇒ `FactAppender.append` 永不写 `team-room/fact`，改走 logger fallback（`facts.ts:66-68, 77-91`）。
 - **实证**：`dict_maintenance` 的 4 个真实成员，投影缓存里的值全部是
   `"teamRoom": { "ver": 1, "seq": <n>, "val": { "rooms": [] } }`
-  （文件位于 `C:\Users\KEI.NEO\.dsh\storages\session_projcache\sessions\`，已查 `session-3f783d79-*`、`session-77778b0a-*`、`session-82c262c6-*`、`session-945d030b-*`）。
+  （文件位于 `$DSH_HOME\storages\session_projcache\sessions\`，已查 `session-3f783d79-*`、`session-77778b0a-*`、`session-82c262c6-*`、`session-945d030b-*`）。
 - ⇒ **本部署上 Web 设置页的团队房间面板渲染不出任何房间**；`/room` 命令与 8 个 `room_*` 工具不受影响。
 
 ### A.4 profile 配置：全部默认值
 
-- `C:\Users\KEI.NEO\.dsh\profiles\web\package.json`：`"dsh-team-rooms": "^1.0.4"`（第 21 行），列于 `dsh.profile.bundles`（第 42 行）。
+- `$DSH_HOME\profiles\web\package.json`：`"dsh-team-rooms": "^1.0.4"`（第 21 行），列于 `dsh.profile.bundles`（第 42 行）。
 - 该 profile 的 `cordis.patch.yml` 中**没有** `team-rooms` 覆盖行（文本搜索未命中）⇒ **运行在 `DEFAULTS` 全默认值下**（`index.ts:122-134`）。
 - 与观测一致：`busNext=189 < busRetention=200`（尚未触发修剪）、`timelineNext=243 < timelineRetention=500`。
 

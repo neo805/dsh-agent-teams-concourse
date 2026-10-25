@@ -76,7 +76,7 @@
 
 ### 3.0 总览
 
-核查了 `C:\Users\KEI.NEO\.dsh\profiles\web\node_modules\` 与 `C:\Users\KEI.NEO\.dsh\profiles\node_modules\` 下全部相关包，加上官方 `@deepseek-ai` 套件中与"隔离执行单元/上下文治理/回注"相关的包。
+核查了 `$DSH_HOME\profiles\web\node_modules\` 与 `$DSH_HOME\profiles\node_modules\` 下全部相关包，加上官方 `@deepseek-ai` 套件中与"隔离执行单元/上下文治理/回注"相关的包。
 
 | 包 | 一句话定位 | 在这条需求轴上做到了哪一步 | 缺什么 |
 |---|---|---|---|
@@ -209,7 +209,7 @@
 |---|---|---|
 | `dsh-effort-router` v`0.2.3` | `package.json:4`：「context-aware per-step **reasoning-effort** routing. Classifies each step (trivial/standard/engineering/hard) … escalates on tool errors, stabilizes with hysteresis, clamps to the target model's advertised efforts, and injects an 'Auto' mask into the native model selector」；挂载 `cordis.patch.yml`：`- id: effort-router / name: dsh-effort-router` | 它管**"用多深的脑子"**，不管"用多隔离的上下文"。**0 分，但是一条旁证**：DSH 生态已经出现过"会话中途注入策略而不打断主线"这类插件，说明宿主能力上这条路是通的 |
 | `dsh-lit-search` v`0.1.3` | `package.json:4`：「Academic literature search, citation and BibTeX tools … (Crossref + OpenAlex)」；注册 `lit_search` / `lit_cite` / `lit_bib` / `lit_related` 四个工具（`README.md` Usage 节） | 它只提供 **S-2 的一种内容来源**（查文献是旁路查询最常见的用途之一），结果同样以工具结果形式进入主上下文。**0 分** |
-| `dsh-annotation` | **目录不存在**（实测 `C:\Users\KEI.NEO\.dsh\profiles\web\node_modules\dsh-annotation` 缺失，`Get-ChildItem` 返回空） | **未查到任何名为 `dsh-annotation` 的已装插件。** 需求清单里的这个名字在本机不成立 |
+| `dsh-annotation` | **目录不存在**（实测 `$DSH_HOME\profiles\web\node_modules\dsh-annotation` 缺失，`Get-ChildItem` 返回空） | **未查到任何名为 `dsh-annotation` 的已装插件。** 需求清单里的这个名字在本机不成立 |
 | `dsh-find-plugin` v`0.3.7` | `package.json:4`：「Find DeepSeek Harness plugins inside the agent — live GitHub dsh-plugin topic search, ranked by stars」；实时搜索 `dsh-plugin` topic，按 star 降序，5 分钟缓存，匿名 API（`README.zh.md` "工作方式"节） | **0 分**，但是本次调研的**方法论注脚**：本机生态的插件发现是可行的，所以"没找到实现"不是"没搜"，而是"搜了、确实没有" |
 
 ---
@@ -350,7 +350,7 @@
 | `dsh-jobs` | `0.2.0-rc.2` | 「Background job registry (ctx.jobs) … shared ids, **owner isolation**, polling, cancellation, and completion listeners」 | **§5.7「成本与配额 / 并发上限」的现成记账与取消供给**；`owner isolation` 恰好是旁路单元需要的归属语义 |
 | `dsh-schedule` | `0.2.0-rc.2` | 「Host-wide durable reminders with shared management and original-Session delivery」 | 旁路产物的延迟投递可参照 |
 
-**一处实测异常（如实记录）**：`C:\Users\KEI.NEO\.dsh\profiles\node_modules\@deepseek-ai\dsh-tool-subagent-report` 在目录列表中可见，但它是一个 **Junction（Mode `l----`）**，目标 `C:\Users\KEI.NEO\AppData\Roaming\npm\node_modules\@deepseek-ai\dsh\node_modules\@deepseek-ai\dsh-tool-subagent-report` **`Test-Path` 返回 `False`**，即**断链**。本机当前 dsh 版本下该包实际不可读，故本报告不对它做任何功能结论。
+**一处实测异常（如实记录）**：`$DSH_HOME\profiles\node_modules\@deepseek-ai\dsh-tool-subagent-report` 在目录列表中可见，但它是一个 **Junction（Mode `l----`）**，目标 `<NPM_GLOBAL>\node_modules\@deepseek-ai\dsh\node_modules\@deepseek-ai\dsh-tool-subagent-report` **`Test-Path` 返回 `False`**，即**断链**。本机当前 dsh 版本下该包实际不可读，故本报告不对它做任何功能结论。
 
 ---
 
@@ -711,7 +711,7 @@
 
 ### 6.1 报告 §7.3 的五个正交旋钮（原文摘录）
 
-来源：`dsh-agent-teams-concourse-report.html` 第 1671 行（`<h3 id="s73">7.3 · 五个正交旋钮（解答 U-8）</h3>`）与第 1676–1687 行的表格。
+来源：`docs/dsh-agent-teams-concourse-report.html` 第 1671 行（`<h3 id="s73">7.3 · 五个正交旋钮（解答 U-8）</h3>`）与第 1676–1687 行的表格。
 
 | ID | 维度 | 中央端 | 对等端 | nanmicoder | team-rooms |
 |---|---|---|---|---|---|
@@ -900,8 +900,8 @@
 
 | # | 事项 | 状态 |
 |---|---|---|
-| U-A1 | `dsh-annotation` 插件 | **目录不存在**（实测 `C:\Users\KEI.NEO\.dsh\profiles\web\node_modules\dsh-annotation` 缺失）。用户清单里的这个名字在本机不成立 |
-| U-A2 | `dsh-tool-subagent-report` 的功能 | 目录项存在但为**断链 Junction**（目标 `C:\Users\KEI.NEO\AppData\Roaming\npm\node_modules\@deepseek-ai\dsh\node_modules\@deepseek-ai\dsh-tool-subagent-report`，`Test-Path` = `False`）。**本机不可读，不作功能结论** |
+| U-A1 | `dsh-annotation` 插件 | **目录不存在**（实测 `$DSH_HOME\profiles\web\node_modules\dsh-annotation` 缺失）。用户清单里的这个名字在本机不成立 |
+| U-A2 | `dsh-tool-subagent-report` 的功能 | 目录项存在但为**断链 Junction**（目标 `<NPM_GLOBAL>\node_modules\@deepseek-ai\dsh\node_modules\@deepseek-ai\dsh-tool-subagent-report`，`Test-Path` = `False`）。**本机不可读，不作功能结论** |
 | U-A3 | `dsh-palimpsest` 的 `presentationMeta` 是否**曾经**在旧版本里实现过 | 当前版本 `0.2.1` 的 `lib/tools/output.js` 只有 `schema` + `render`，没有 `presentationMeta`。注释提到它但代码未声明。**历史版本未核查** |
 | U-A4 | `billion-context-dsh` 的 README 正文（39KB） | **未读全文**。本次只读了 `package.json` 与 `cordis.patch.yml` 的注释块。其压缩/恢复的精确 API 语义引用自 DSH 运行时提示与本会话实际工具行为，未逐条核对 README |
 | U-A5 | `clearai-dsh` 的 README / CHANGELOG（18KB / 92KB） | **未读**。结论仅基于 `package.json` 的 description 与 `dsh.client.inject` 列表 |
@@ -949,12 +949,12 @@
 
 **本机报告（只读指定小节）**
 
-- `dsh-agent-teams-concourse-report.html` §7.2（`<h3 id="s72">` 第 1414 行；7.2.2 第 1468 行；7.2.3 第 1517 行）
-- `dsh-agent-teams-concourse-report.html` §7.3（`<h3 id="s73">` 第 1671 行；旋钮表第 1676–1687 行；D1–D5 分别在第 1680–1684 行）
+- `docs/dsh-agent-teams-concourse-report.html` §7.2（`<h3 id="s72">` 第 1414 行；7.2.2 第 1468 行；7.2.3 第 1517 行）
+- `docs/dsh-agent-teams-concourse-report.html` §7.3（`<h3 id="s73">` 第 1671 行；旋钮表第 1676–1687 行；D1–D5 分别在第 1680–1684 行）
 
 ### 8.3 本机证据索引（`文件:行号`）
 
-**`dsh-palimpsest`（`C:\Users\KEI.NEO\.dsh\profiles\web\node_modules\dsh-palimpsest\`）**
+**`dsh-palimpsest`（`$DSH_HOME\profiles\web\node_modules\dsh-palimpsest\`）**
 
 | 位置 | 内容 |
 |---|---|
@@ -998,7 +998,7 @@
 | `dsh-find-plugin/README.zh.md`（"工作方式"节） | 实时搜索 `dsh-plugin` topic，按 star 降序，5 分钟缓存，匿名 API |
 | `dsh-annotation` | **目录不存在**（实测） |
 
-**官方 `@deepseek-ai` 套件（`C:\Users\KEI.NEO\.dsh\profiles\node_modules\@deepseek-ai\`）**
+**官方 `@deepseek-ai` 套件（`$DSH_HOME\profiles\node_modules\@deepseek-ai\`）**
 
 | 位置 | 内容 |
 |---|---|

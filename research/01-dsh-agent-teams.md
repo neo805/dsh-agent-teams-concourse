@@ -1,7 +1,7 @@
 # `@nanmicoder/dsh-agent-teams` v0.1.22 深度逆向调研报告
 
 > 调研对象：本地已安装的 DSH 插件 `@nanmicoder/dsh-agent-teams@0.1.22`
-> 路径：`C:\Users\KEI.NEO\.dsh\profiles\desktop\node_modules\@nanmicoder\dsh-agent-teams\`
+> 路径：`$DSH_HOME\profiles\desktop\node_modules\@nanmicoder\dsh-agent-teams\`
 > 方法：逐文件精读 `lib/*.js`（编译产物，保留完整 JSDoc）+ 分段读 `lib/client/*.js`，结论均附 `文件:行号`。
 > 说明：`lib/` 是 TypeScript 经 `tsc` + `tsdown` 后的 ESM 产物，代码可读性高（未压缩、保留注释）。`lib/client.js` 是前端 bundle（4331 行，含内联 CSS），可读性差，仅用于交叉验证。
 

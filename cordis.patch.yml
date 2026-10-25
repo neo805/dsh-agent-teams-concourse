@@ -1,12 +1,14 @@
 # dsh-agent-teams-concourse bundle patch：挂载组织层插件。
 #
-# 设计要点（详见 DEVELOPMENT_PLAN.md 与调研报告）：
+# 设计要点（详见 docs/REQUIREMENTS.html 与 DEVELOPMENT_PLAN.md）：
 #  · NFR-1 惰性安装：enabled 缺省为 false，未启用时零行为变更、零监听器。
-#  · 复用官方 agent-team 底座（dsh-experimental-agent-team，由官方 profile 包提供）；
-#    官方缺席时插件降级为「自有任务图 + 无跨顶点邮箱」，不崩溃（R-1）。
-#  · P3 起在此补充 Config 项（schemastery schema）。
+#  · 路线 A（D-P2）：自建组织层（顶点注册表 / 收件箱准入 / 任务板映射 / JSONL 台账），
+#    只依赖宿主 ctx.subagents · ctx.llm · ctx.tools · ctx.agents 四个稳定面；
+#    不依赖 dsh-experimental-agent-team 的 roster/邮箱（R-9 已证伪，见 docs/spikes/）。
+#  · 配置项（schemastery）：enabled（总开关）/ storagePath（JSONL 台账路径）。
 - insert:
     - id: concourse
       name: dsh-agent-teams-concourse
       # config:
-      #   enabled: false   # 总开关（P3 生效）：true 才注册工具与服务
+      #   enabled: false          # 总开关：true 才注册工具与服务
+      #   storagePath: <dir>      # 台账目录；缺省探测宿主 storage，再缺席则内存存储

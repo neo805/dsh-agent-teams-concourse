@@ -1,7 +1,7 @@
 # 08 · DSH 官方 Agent Teams 子系统（第 6 家竞品，用户清单外）
 
 > 调研人：Captain 一手精读（README.zh + 类型声明 + profile patch）
-> 来源：`C:\Users\KEI.NEO\.dsh\staging-upgrade-20260929\node_modules\@deepseek-ai\`
+> 来源：`$DSH_HOME\staging-upgrade-20260929\node_modules\@deepseek-ai\`
 > 版本：**`0.2.0-rc.2`** —— 与本机 DSH CLI 版本**完全一致**
 > 状态：**实验性发布（experimental）、不承诺稳定性**，通过 opt-in bundle 启用
 

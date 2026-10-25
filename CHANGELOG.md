@@ -3,6 +3,36 @@
 本项目遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/) 与
 [语义化版本](https://semver.org/lang/zh-CN/)。版本变更须在此登记。
 
+## [Unreleased] — 2026-10-25 · 文档与工作流重构（无代码行为变更）
+
+### Added
+
+- `docs/REQUIREMENTS.html`（需求文档 v2.0）：**唯一需求依据**。合并两册调研，统一需求编号
+  （FR-A 拓扑 / FR-B 定档 / FR-C 通信 / FR-D 探针，共 45 条 + NFR 14 条），纳入 P2 路线 A
+  决议对架构的修正，并给出每条需求的实现状态（已实现 / 部分 / 未实现）。
+
+### Changed
+
+- `COLLABORATION.md` 升级到姊妹项目同代规范：角色改称**出品人 / AI 第一作者**、
+  版本号**全量带 `rc`**、**测试先行**、**四级验证阶梯**（标准测试 → Web 安装 →
+  Web 实机验证 → Desktop + 出品人验收，含 Web 实机闸门与 45 分钟预算）、
+  交付清单改为「验收通过才 push」、已知残留必须公示、文档隐私边界。
+- `DEVELOPMENT_PLAN.md` 重写为 v2.0：P0–P4 与 `0.1.0` / `0.2.0` 归档为已完成；新增
+  **P5 旁路探针 MVP / P6 探针生命周期 / P7 校准闭环与运行期能力 / P8 会话加入 T2a /
+  P9 发布准备**；技术债 T-1…T-10、风险 P-R1…P-R7、已知残留 13 条全部公示。
+- `README.md` / `README.zh.md` 双语重写：现状表（诚实标注未完成项）、快速上手、
+  四层结构、闸门口径、已知边界、按版本区间的作者声明。
+- 两份调研报告移入 `docs/`（`dsh-agent-teams-concourse-report.html`、
+  `dsh-side-inquiry-probe-report.html`），继续作为调研底稿。
+
+### Fixed
+
+- `scripts/corpus-regression.mjs`：报告改为写**仓库相对路径**（此前把绝对路径写进入库文档）。
+- 入库文档与脚本的机器路径清理：`research/01–13`、`cordis.patch.yml`、
+  `scripts/_mount-concourse.cjs` 内共 46 处 `C:\Users\<user>\…` 替换为
+  `$DSH_HOME` / `<DSH_INSTALL>` / `<TEMP>` / `<NPM_GLOBAL>` 等占位符；
+  挂载脚本改为从 `$DSH_HOME` 与命令行参数解析，不再硬编码任何机器路径。
+
 ## [0.2.0] — 2026-10-18
 
 运行时基线升级到 DSH 0.2.1-rc.2（不兼容 0.2.0 系列），并修复真机测试

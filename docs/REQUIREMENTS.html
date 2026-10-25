@@ -1,0 +1,821 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>dsh-agent-teams-concourse · 需求文档 v2.0</title>
+<style>
+/* ============================================================
+   本文件沿用两份调研报告的视觉口径（与本插件主张一致）：
+   P1 零美术资产：无图片、无图标字体、无 emoji
+   P2 决策优先：结论置顶
+   P3 单行总览：首屏一张表说清状态
+   P4 渐进披露：细节折叠
+   P5 几何优先：1px 描边、2px 圆角、无渐变
+   P6 静态可读：颜色不单独承载语义
+   ============================================================ */
+:root{
+  --bg:#f7f7f5; --surface:#ffffff; --surface-2:#f0f0ed;
+  --line:#d5d5d0; --line-2:#e8e8e4;
+  --ink:#16181a; --ink-2:#4a4f55; --ink-3:#7c828a;
+  --accent:#1b4d7a; --accent-bg:#eaf1f7;
+  --ok:#1d6b3f; --ok-bg:#e9f4ee;
+  --warn:#8a5a00; --warn-bg:#fbf2e0;
+  --bad:#8f2020; --bad-bg:#fbeaea;
+  --mono:ui-monospace,"SFMono-Regular","Cascadia Mono","Consolas","Liberation Mono",monospace;
+  --sans:-apple-system,BlinkMacSystemFont,"Segoe UI","Microsoft YaHei","PingFang SC","Hiragino Sans GB",sans-serif;
+}
+@media (prefers-color-scheme:dark){
+  :root{
+    --bg:#101112; --surface:#171819; --surface-2:#1e2022;
+    --line:#33363a; --line-2:#26282b;
+    --ink:#e6e7e8; --ink-2:#b8bcc0; --ink-3:#8a8f95;
+    --accent:#7fb2dd; --accent-bg:#152430;
+    --ok:#7ec49a; --ok-bg:#132a1e;
+    --warn:#d9ae5c; --warn-bg:#2b2416;
+    --bad:#e08a8a; --bad-bg:#2c1717;
+  }
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth;scroll-padding-top:16px}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);font-size:15px;line-height:1.75;-webkit-font-smoothing:antialiased}
+.wrap{display:grid;grid-template-columns:252px minmax(0,1fr);max-width:1360px;margin:0 auto;align-items:start}
+@media (max-width:900px){.wrap{grid-template-columns:1fr}}
+nav.toc{position:sticky;top:0;height:100vh;overflow-y:auto;border-right:1px solid var(--line);background:var(--surface);padding:18px 0 40px;font-size:13px}
+@media (max-width:900px){nav.toc{position:static;height:auto;border-right:0;border-bottom:1px solid var(--line)}}
+nav.toc .brand{padding:0 18px 14px;border-bottom:1px solid var(--line-2);margin-bottom:12px}
+nav.toc .brand b{display:block;font-size:13px;letter-spacing:.02em}
+nav.toc .brand span{display:block;color:var(--ink-3);font-size:11.5px;font-family:var(--mono);margin-top:3px}
+nav.toc a{display:block;padding:3px 18px;color:var(--ink-2);text-decoration:none;border-left:2px solid transparent;line-height:1.5}
+nav.toc a:hover{background:var(--surface-2);color:var(--ink)}
+nav.toc a.lv1{font-weight:600;color:var(--ink);margin-top:8px}
+nav.toc a.lv2{padding-left:32px;font-size:12.5px;color:var(--ink-3)}
+nav.toc a.lv2:hover{color:var(--ink)}
+main{padding:0 40px 120px;min-width:0;max-width:1000px}
+@media (max-width:900px){main{padding:0 18px 80px}}
+section{padding-top:34px;margin-top:34px;border-top:1px solid var(--line-2)}
+section:first-of-type{border-top:0;margin-top:0}
+h1{font-size:26px;line-height:1.35;margin:0 0 6px;letter-spacing:-.01em}
+h2{font-size:20px;margin:0 0 16px;letter-spacing:-.005em;padding-bottom:8px;border-bottom:1px solid var(--line)}
+h3{font-size:16px;margin:26px 0 10px}
+h4{font-size:14px;margin:20px 0 8px;color:var(--ink-2)}
+p{margin:10px 0}
+a{color:var(--accent)}
+ul,ol{margin:10px 0;padding-left:22px}
+li{margin:4px 0}
+code,.mono{font-family:var(--mono);font-size:.88em}
+p code,li code,td code,th code,summary code{background:var(--surface-2);border:1px solid var(--line-2);padding:.5px 4px;border-radius:2px;color:var(--ink)}
+strong{font-weight:650}
+hr{border:0;border-top:1px solid var(--line-2);margin:24px 0}
+.cover{padding:56px 0 0;border:0;margin:0}
+.cover .eyebrow{font-family:var(--mono);font-size:12px;color:var(--ink-3);letter-spacing:.06em;text-transform:uppercase}
+.cover h1{font-size:32px;margin:10px 0 8px}
+.cover .sub{font-size:16px;color:var(--ink-2);max-width:72ch}
+.meta{margin-top:22px;border:1px solid var(--line);background:var(--surface);border-radius:2px}
+.meta table{width:100%;border-collapse:collapse;font-size:13px}
+.meta td{padding:7px 14px;border-bottom:1px solid var(--line-2);vertical-align:top}
+.meta tr:last-child td{border-bottom:0}
+.meta td:first-child{width:150px;color:var(--ink-3);font-family:var(--mono);font-size:12px}
+.kpi{display:grid;grid-template-columns:repeat(auto-fit,minmax(148px,1fr));gap:1px;background:var(--line);border:1px solid var(--line);border-radius:2px;margin:18px 0}
+.kpi div{background:var(--surface);padding:13px 15px}
+.kpi .n{font-family:var(--mono);font-size:22px;line-height:1.2;color:var(--ink)}
+.kpi .l{font-size:12px;color:var(--ink-3);margin-top:3px;line-height:1.45}
+table.t{width:100%;border-collapse:collapse;font-size:13px;margin:14px 0;background:var(--surface);border:1px solid var(--line);border-radius:2px}
+table.t th{background:var(--surface-2);text-align:left;padding:8px 11px;font-weight:650;border-bottom:1px solid var(--line);white-space:nowrap}
+table.t td{padding:7px 11px;border-bottom:1px solid var(--line-2);vertical-align:top}
+table.t tr:last-child td{border-bottom:0}
+table.t td.c,table.t th.c{text-align:center}
+.scroll{overflow-x:auto;-webkit-overflow-scrolling:touch}
+.callout{border:1px solid var(--line);border-left:3px solid var(--ink-3);background:var(--surface);border-radius:2px;padding:11px 15px;margin:14px 0;font-size:14px}
+.callout .tag{font-family:var(--mono);font-size:11px;letter-spacing:.05em;text-transform:uppercase;color:var(--ink-3);display:block;margin-bottom:4px}
+.callout.ok{border-left-color:var(--ok);background:var(--ok-bg)}
+.callout.warn{border-left-color:var(--warn);background:var(--warn-bg)}
+.callout.bad{border-left-color:var(--bad);background:var(--bad-bg)}
+.callout.info{border-left-color:var(--accent);background:var(--accent-bg)}
+.callout.ok .tag{color:var(--ok)} .callout.warn .tag{color:var(--warn)}
+.callout.bad .tag{color:var(--bad)} .callout.info .tag{color:var(--accent)}
+.callout p:first-of-type{margin-top:0} .callout p:last-child{margin-bottom:0}
+pre{font-family:var(--mono);font-size:12.3px;line-height:1.55;background:var(--surface);border:1px solid var(--line);border-radius:2px;padding:13px 15px;overflow-x:auto;margin:14px 0;color:var(--ink)}
+pre.wire{background:var(--surface-2);font-size:12px;line-height:1.5}
+.ev{font-family:var(--mono);font-size:11.5px;color:var(--ink-3)}
+.b{display:inline-block;font-family:var(--mono);font-size:11px;line-height:1.6;padding:0 5px;border-radius:2px;border:1px solid var(--line);background:var(--surface-2);color:var(--ink-2);white-space:nowrap}
+.b.ok{border-color:var(--ok);color:var(--ok);background:var(--ok-bg)}
+.b.warn{border-color:var(--warn);color:var(--warn);background:var(--warn-bg)}
+.b.bad{border-color:var(--bad);color:var(--bad);background:var(--bad-bg)}
+.b.info{border-color:var(--accent);color:var(--accent);background:var(--accent-bg)}
+.tiers{display:grid;gap:1px;background:var(--line);border:1px solid var(--line);border-radius:2px;margin:16px 0}
+.tier{background:var(--surface);padding:11px 14px;display:grid;grid-template-columns:78px 1fr;gap:14px;align-items:start}
+.tier.gap{background:var(--bad-bg)}
+.tier .id{font-family:var(--mono);font-size:13px;font-weight:650}
+.tier .id small{display:block;font-weight:400;font-size:11px;color:var(--ink-3)}
+.tier .d{font-size:13.5px}
+.tier .d .g{font-family:var(--mono);font-size:12px;color:var(--ink-2);display:block;margin-top:2px}
+details{border:1px solid var(--line);border-radius:2px;background:var(--surface);margin:14px 0}
+details>summary{cursor:pointer;padding:9px 14px;font-size:13.5px;font-weight:600;list-style:none;display:flex;align-items:center;gap:8px;user-select:none}
+details>summary::-webkit-details-marker{display:none}
+details>summary::before{content:"+";font-family:var(--mono);color:var(--ink-3);width:10px}
+details[open]>summary::before{content:"−"}
+details>summary:hover{background:var(--surface-2)}
+details .body{padding:2px 15px 14px;border-top:1px solid var(--line-2)}
+footer{margin-top:50px;padding-top:18px;border-top:1px solid var(--line);color:var(--ink-3);font-size:12.5px;font-family:var(--mono)}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<nav class="toc">
+  <div class="brand">
+    <b>dsh-agent-teams-concourse</b>
+    <span>需求文档 · v2.0</span>
+  </div>
+  <a class="lv1" href="#s0">0 · 本版说明与对齐状态</a>
+  <a class="lv1" href="#s1">1 · 定位与边界</a>
+  <a class="lv2" href="#s11">1.1 六条设计原则</a>
+  <a class="lv2" href="#s12">1.2 职责切分</a>
+  <a class="lv2" href="#s13">1.3 永不做的四件事</a>
+  <a class="lv2" href="#s14">1.4 与相邻能力的分工</a>
+  <a class="lv1" href="#s2">2 · 核心架构：虚拟拓扑</a>
+  <a class="lv2" href="#s21">2.1 图模型与 fail-closed</a>
+  <a class="lv2" href="#s22">2.2 顶点与边属性</a>
+  <a class="lv2" href="#s23">2.3 六级拓扑谱系</a>
+  <a class="lv2" href="#s24">2.4 默认形态与升级路径</a>
+  <a class="lv2" href="#s25">2.5 成本为何不爆炸</a>
+  <a class="lv1" href="#s3">3 · 六个正交旋钮</a>
+  <a class="lv1" href="#s4">4 · 需求条目</a>
+  <a class="lv2" href="#s41">4.1 拓扑 FR-A</a>
+  <a class="lv2" href="#s42">4.2 定档 FR-B</a>
+  <a class="lv2" href="#s43">4.3 通信 FR-C</a>
+  <a class="lv2" href="#s44">4.4 旁路探针 FR-D</a>
+  <a class="lv2" href="#s45">4.5 非功能 NFR</a>
+  <a class="lv1" href="#s5">5 · UI 规格</a>
+  <a class="lv2" href="#s51">5.1 视觉原语</a>
+  <a class="lv2" href="#s52">5.2 侧栏与计划卡</a>
+  <a class="lv2" href="#s53">5.3 探针名册与一行痕迹</a>
+  <a class="lv2" href="#s54">5.4 挂载点与客户端约束</a>
+  <a class="lv1" href="#s6">6 · 数据模型与事件</a>
+  <a class="lv1" href="#s7">7 · 验收判据</a>
+  <a class="lv2" href="#s71">7.1 团队层 V-1…V-5</a>
+  <a class="lv2" href="#s72">7.2 探针层 AC-1…AC-5</a>
+  <a class="lv2" href="#s73">7.3 量化判据</a>
+  <a class="lv1" href="#s8">8 · 不做与延后</a>
+  <a class="lv1" href="#s9">9 · 需求溯源与决议</a>
+  <a class="lv1" href="#s10">10 · 待验证事项</a>
+</nav>
+
+<main>
+
+<section class="cover">
+  <div class="eyebrow">Requirements · v2.0 · 2026-10-25</div>
+  <h1>dsh-agent-teams-concourse · 需求文档</h1>
+  <p class="sub">DSH 的<strong>组织层</strong>：把「谁和谁能通信、每个执行单元用什么模型与思考强度、产出如何回到主线」变成可编辑的一等数据。本文件合并两册调研，是<strong>唯一的需求依据</strong>；调研原文保留在 <code>docs/</code> 下作为背景与证据。</p>
+
+  <div class="meta">
+    <table>
+      <tr><td>需求版本</td><td>v2.0（本版：把两份调研报告合并为一册，并纳入 P2 路线决议对架构的修正）</td></tr>
+      <tr><td>取代</td><td><code>docs/dsh-agent-teams-concourse-report.html</code> §7 与 <code>docs/dsh-side-inquiry-probe-report.html</code> §7 的规范性地位；两份原文继续作为调研底稿引用</td></tr>
+      <tr><td>实现基线</td><td>插件 <code>0.2.0</code> · DSH <code>0.2.1-rc.2</code> · Node <code>^22.19 || &gt;=24</code> · 测试 <code>349/349</code>（44 文件）</td></tr>
+      <tr><td>交付形态</td><td>DSH bundle（<code>cordis.patch.yml</code> 一条插件行）+ 宿主侧服务与 <code>team_*</code> 工具 + 客户端右侧栏</td></tr>
+      <tr><td>阅读指引</td><td>只读一段：<a href="#s0">§0 对齐状态</a>。<br>要判需求是否成立：<a href="#s2">§2</a> 与 <a href="#s7">§7</a>。<br>要开工：<a href="#s4">§4</a> + <a href="#s8">§8</a>。</td></tr>
+    </table>
+  </div>
+
+  <div class="kpi">
+    <div><div class="n">6</div><div class="l">级拓扑谱系<br>T0 → T2a（T2b 不提供）</div></div>
+    <div><div class="n">6</div><div class="l">个正交旋钮<br>D1–D5 + D6 回注策略</div></div>
+    <div><div class="n">1</div><div class="l">层执行底座<br>与拓扑复杂度无关</div></div>
+    <div><div class="n">45</div><div class="l">条功能需求<br>FR-A 6 · B 7 · C 12 · D 20</div></div>
+    <div><div class="n">14</div><div class="l">条非功能需求<br>NFR-1 … NFR-14</div></div>
+    <div><div class="n">10</div><div class="l">条验收判据<br>V-1…V-5 + AC-1…AC-5</div></div>
+    <div><div class="n">0</div><div class="l">个美术资产<br>零图片 · 零 emoji · 零头像</div></div>
+  </div>
+</section>
+
+<section id="s0">
+  <h2>0 · 本版说明与对齐状态</h2>
+
+  <p>两册调研分别回答了两个问题：<strong>「团队拓扑长什么样」</strong>（第一册）与<strong>「产出的返回通道长什么样」</strong>（第二册）。它们共享同一个图模型，因此本版合并为一册：拓扑、定档、通信闸门属于同一层机制，探针是这张图上的<strong>一个新顶点类</strong>，而不是第二个插件。</p>
+
+  <div class="callout info">
+    <span class="tag">本版两处实质性修正</span>
+    <p><strong>① 底座复用改判（路线 A）。</strong>第一册 §7.1.3 假设「注册 subagent provider 即可让官方 <code>spawnTeammate</code> 透传 <code>agentOptions</code>」——P2 运行时探针<strong>证伪</strong>了这条链路（官方请求体不含 <code>agentOptions</code>/<code>toolFilter</code>）。本版据此改写 §1.2：concourse <strong>自建</strong>顶点注册表、邮箱、任务板与 JSONL 持久化，只依赖宿主 <code>ctx.subagents</code> / <code>ctx.llm</code> / <code>ctx.tools</code> / <code>ctx.agents</code> 四个稳定面。收益是 R-1（experimental 底座漂移）风险消除。<span class="ev">docs/decisions/D-P2-route.md</span></p>
+    <p><strong>② 需求编号统一。</strong>第二册原用 <code>FR-1.x…FR-10.x</code>，与第一册 <code>FR-2.x/FR-4.x/FR-5.x</code> 撞号。本版统一为 <strong>FR-A/B/C/D</strong> 四组，映射见 <a href="#s9">§9.3</a>。</p>
+  </div>
+
+  <h3>0.1 需求条目与实现的对齐状态</h3>
+  <p>这张表是「需求捋清楚」的核心产物：每一条需求都能看到它今天处在哪一格。状态口径：<span class="b ok">已实现</span> 有测试或真机证据；<span class="b warn">部分</span> 主干在、边界缺；<span class="b bad">未实现</span> 尚未开工；<span class="b info">按设计不做</span> 永久边界。</p>
+
+  <div class="scroll">
+  <table class="t">
+    <tr><th>组</th><th>主题</th><th class="c">条数</th><th class="c">已实现</th><th class="c">部分</th><th class="c">未实现</th><th>落地版本</th></tr>
+    <tr><td class="mono">FR-A</td><td>拓扑：声明式数据、谱系、审批闸门、容量校验</td><td class="c">6</td><td class="c">4</td><td class="c">1</td><td class="c">1</td><td>0.1.0（A3 待 P8）</td></tr>
+    <tr><td class="mono">FR-B</td><td>逐顶点定档、可解释建议、台账、校准闭环</td><td class="c">7</td><td class="c">5</td><td class="c">1</td><td class="c">1</td><td>0.1.0 / 0.2.0（B5 B6 待 P7）</td></tr>
+    <tr><td class="mono">FR-C</td><td>通信硬约束：开放边集、唤醒、终止、预算、留痕</td><td class="c">12</td><td class="c">10</td><td class="c">0</td><td class="c">2</td><td>0.1.0（C3 C8 待 P7/P8）</td></tr>
+    <tr><td class="mono">FR-D</td><td>旁路探针：隔离、handle 回注、丢弃、晋升</td><td class="c">20</td><td class="c">0</td><td class="c">0</td><td class="c">20</td><td>未开工（P5–P6）</td></tr>
+    <tr><td class="mono">NFR</td><td>惰性、韧性、零资产、持久化、fail-loud…</td><td class="c">14</td><td class="c">11</td><td class="c">0</td><td class="c">3</td><td>0.1.0 / 0.2.0（11/13/14 待 P5）</td></tr>
+  </table>
+  </div>
+
+  <div class="callout warn">
+    <span class="tag">一句话结论</span>
+    <p><strong>团队层（第一册）已经跑通并被真机验证；探针层（第二册）一行代码都还没有。</strong>所以下一阶段的全部风险集中在 FR-D：它的可行性已被平台原语证实，但「零回注纪律」与「遮蔽原语」两处仍需在实现时逐条钉死（<a href="#s10">§10</a>）。</p>
+  </div>
+
+  <h3>0.2 文档地图</h3>
+  <div class="scroll">
+  <table class="t">
+    <tr><th>文件</th><th>地位</th><th>内容</th></tr>
+    <tr><td class="mono">docs/REQUIREMENTS.html</td><td><span class="b ok">权威</span></td><td>本文件：需求条目、判据、边界</td></tr>
+    <tr><td class="mono">docs/dsh-agent-teams-concourse-report.html</td><td><span class="b">底稿</span></td><td>第一册：品类调研 + 拓扑与五旋钮（v1.2）</td></tr>
+    <tr><td class="mono">docs/dsh-side-inquiry-probe-report.html</td><td><span class="b">底稿</span></td><td>第二册：旁路探针 + D6 回注策略（v1.0）</td></tr>
+    <tr><td class="mono">research/01–13-*.md</td><td><span class="b">证据</span></td><td>13 份竞品/平台原语精读，结论附 文件:行号</td></tr>
+    <tr><td class="mono">docs/decisions/D-*.md</td><td><span class="b">决议</span></td><td>路线、运行时适配、修复批次的决策留痕</td></tr>
+    <tr><td class="mono">DEVELOPMENT_PLAN.md</td><td><span class="b">施工</span></td><td>阶段、出口标准、已知残留</td></tr>
+  </table>
+  </div>
+</section>
+
+<section id="s1">
+  <h2>1 · 定位与边界</h2>
+
+  <p><strong>一句话定位：</strong>dsh-agent-teams-concourse 是 DSH 的<strong>组织层</strong>——它把「谁和谁能通信、每个执行单元用什么模型与思考强度、任务与产出如何在层与层之间流动」变成可编辑的一等数据，用<strong>一次计划审批</strong>换运行期零审批，用<strong>几何符号</strong>换掉一切拟人化元素。</p>
+
+  <p>"concourse" 取「汇流」之意：多条协作路径在此汇合，而不预设某一种组织形状。项目的立论只有一句：<strong>拓扑是可编辑数据，不是代码常量；拓扑是修剪出来的，不是搭建出来的。</strong></p>
+
+  <h3 id="s11">1.1 六条设计原则</h3>
+  <div class="scroll">
+  <table class="t">
+    <tr><th class="c">ID</th><th>原则</th><th>具体动作</th><th>回应的痛点</th></tr>
+    <tr><td class="c mono">P1</td><td><strong>零美术资产</strong></td><td>包内不得含 <code>.png/.jpg/.svg/.gif</code>；禁头像、emoji 吉祥物、动画精灵。视觉原语只有 Unicode 几何字符、ASCII 树、表格、色块。CI 静态检查。</td><td>拟人化</td></tr>
+    <tr><td class="c mono">P2</td><td><strong>决策优先</strong></td><td>面板最上方永远是「待你决定」，且<strong>通常为空</strong>；空态显式显示「无待决事项」——让「没有需要我管的事」成为可读信息。</td><td>信息杂乱</td></tr>
+    <tr><td class="c mono">P3</td><td><strong>单行总览</strong></td><td>任何时候顶部一行说清团队状态：拓扑类型 · 顶点数 · 活跃数 · 开放边 · 预算 · 回声计数。</td><td>信息杂乱</td></tr>
+    <tr><td class="c mono">P4</td><td><strong>渐进披露</strong></td><td>流水默认折叠；<strong>任何默认折叠都必须显式说明隐藏了什么</strong>（规避「成员看起来消失了」的缺陷）。</td><td>信息缺失</td></tr>
+    <tr><td class="c mono">P5</td><td><strong>一次审批</strong></td><td>计划审批是唯一的常规审批点，运行期零审批。但<strong>破坏性操作必须确认</strong>：改拓扑 / 终止顶点 / 删任务 / 改预算 / 首次跨边界通信。</td><td>审批疲劳</td></tr>
+    <tr><td class="c mono">P6</td><td><strong>形状为主，颜色加速</strong></td><td>每个状态<strong>同时</strong>有形状与颜色；<strong>形状单独即可完整表意</strong>（色盲、灰度截图、日志、纯文本转发都可读）。严禁「只有颜色不同、形状相同」。</td><td>可读性</td></tr>
+  </table>
+  </div>
+
+  <h3 id="s12">1.2 职责切分（路线 A 定稿）</h3>
+  <p>第一册原设想「复用官方 agent-team 的 roster / 邮箱 / 任务 DAG」。P2 探针证伪了那条注入链路，路线改为<strong>自建组织层</strong>。下表是<strong>当前有效的分工</strong>，实现与之一致。</p>
+
+  <div class="scroll">
+  <table class="t">
+    <tr><th>层</th><th>负责</th><th>不负责</th></tr>
+    <tr><td><strong>宿主稳定面</strong><br><span class="mono">ctx.subagents / llm / tools / agents</span></td><td>拉起可续跑子代理（<code>startActivation</code>）、逐顶点 <code>agentOptions</code>、投递与中断、模型目录枚举、工具注册、子 Agent 作用域（<code>tools.restrict</code>）</td><td>拓扑形状 · 通信闸门 · 名册投影 · 预算核算</td></tr>
+    <tr><td><strong>concourse 层</strong><br><span class="mono">src/kernel · host · service · tools · client</span></td><td><strong>虚拟拓扑</strong>（开放边集）· <strong>逐顶点定档</strong> · <strong>通信闸门</strong>（收件侧权威）· 顶点注册表与名册 · 任务板映射 · 预算台账 · JSONL 持久化与回放 · 计划编辑器与几何 UI · 探针顶点类</td><td>模型推理 · 邮箱投递原语 · 会话日志 · 审批 UI 本体</td></tr>
+    <tr><td><strong>不做</strong></td><td colspan="2">真实嵌套 concourse（D-5）· 跨 DSH 实例房间（D-4）· 任何美术/拟人资产（P1）· 设置页面</td></tr>
+  </table>
+  </div>
+
+  <h3 id="s13">1.3 永不做的四件事</h3>
+  <div class="scroll">
+  <table class="t">
+    <tr><th>边界</th><th>理由</th><th>越界判据</th></tr>
+    <tr><td><strong>不做真实嵌套 concourse</strong></td><td>虚拟拓扑的表达力已覆盖复合树，真实嵌套不增表达力；且其初始化会在运行中产生新的组队审批，<strong>打断用户已批准的总计划</strong>。</td><td>规格里出现「子团队再建一个 concourse」即越界（D-5）。</td></tr>
+    <tr><td><strong>不做跨 DSH 实例的房间</strong></td><td>保持单进程假设；与宿主「mailbox 不保证跨进程 exactly-once」的声明一致。</td><td>出现第二端口、第二进程、网络传输即越界（D-4）。</td></tr>
+    <tr><td><strong>不打包任何美术资产</strong></td><td>拟人化是本品类要修的病，不是要抄的特性；且体积会拖累首屏。</td><td>CI 在 files/src 全域扫到图片或 emoji 码位即失败（P1 / NFR-3）。</td></tr>
+    <tr><td><strong>不做设置页面</strong></td><td>与姊妹项目同一哲学：配置只写在插件配置文件里，客户端只做只读显示。<strong>注意：本项目有 UI，但不是设置 UI。</strong></td><td>出现「设置」标签页或可写配置控件即越界。</td></tr>
+  </table>
+  </div>
+
+  <h3 id="s14">1.4 与相邻能力的分工</h3>
+  <p>第二册最重要的产出之一：现有生态是<strong>哑铃形</strong>的——一头是极廉价的工具调用，一头是极重的子代理，<strong>中间「花几千 token 搞明白一件事，然后多半就扔了」那一档没有对应物</strong>。探针补的就是这一档。</p>
+  <div class="scroll">
+  <table class="t">
+    <tr><th>单元</th><th>解决的问题</th><th>产出</th><th>成本量级</th><th>返回方式</th></tr>
+    <tr><td><strong>工具</strong></td><td>取一段已知位置的信息</td><td>原文（可能落盘 + 路径）</td><td>百 ~ 千 token</td><td>同步进上下文</td></tr>
+    <tr><td><strong>探针</strong></td><td>搞清一件与主线无关的事</td><td><strong>摘要 + 句柄</strong></td><td>千 ~ 万 token</td><td><strong>不回注，可拉取</strong></td></tr>
+    <tr><td><strong>子代理 / 成员</strong></td><td>完成主线目标的一个组成部分</td><td>成果 + 可续聊会话</td><td>万 ~ 十万 token</td><td>异步推回上下文</td></tr>
+  </table>
+  </div>
+  <div class="callout">
+    <span class="tag">一句话记住差别</span>
+    <p><strong>子代理的返回是推送（push），探针的返回是拉取（pull）。</strong>推送意味着「不管你要不要，结果都会到达你的上下文」；拉取意味着「结果留在原地等你来取，不来取就等于不存在」。</p>
+  </div>
+</section>
+
+<section id="s2">
+  <h2>2 · 核心架构：虚拟拓扑</h2>
+
+  <h3 id="s21">2.1 图模型与 fail-closed</h3>
+  <p>宿主提供的物理事实是<strong>完全图</strong> K<sub>n</sub>：任意两个执行单元之间都存在可达的通信信道（它们都是同一会话的直接子代理，由本插件自建邮箱投递）。concourse 的定义因此是一个<strong>带属性的有向图</strong> G = (V, E)，其中 E ⊂ K<sub>n</sub> 是<strong>开放的通信信道集合</strong>——不在 E 里的边即被闸门关闭。</p>
+
+  <div class="callout info">
+    <span class="tag">为什么默认必须是关闭</span>
+    <p>失败模式不对称：若默认开放、忘记关闭 → 出现<strong>计划外的通信通道</strong>（静默、难发现、直接构成回声风暴风险）；若默认关闭、忘记开放 → 投递被硬拒绝并留痕，<strong>用户立刻看见并修正</strong>。</p>
+    <p>所以：<strong>物理事实是完全图，concourse 的模型是开放边集，执行时 fail-closed（deny-by-default）。</strong></p>
+  </div>
+
+  <p><strong>第一性质：执行底座恒为一层。</strong>所有顶点都是该会话的直接子代理，派生深度恒为 1。「层」（layer）只是对顶点施加的<strong>权限与可见性标注</strong>，不是真实的派生嵌套结构。树形外观由开放边集决定，而非由调用栈决定。</p>
+
+  <h3 id="s22">2.2 顶点与边属性</h3>
+  <div class="scroll">
+  <table class="t">
+    <tr><th>顶点属性</th><th>取值</th><th>作用</th></tr>
+    <tr><td class="mono">id</td><td>字符串</td><td>唯一标识（面板/工具里引用）</td></tr>
+    <tr><td class="mono">role</td><td>自由文本</td><td><strong>纯语义提示，不参与权限判定</strong>——权限一律由边与显式凭据决定</td></tr>
+    <tr><td class="mono">provider / model / reasoningEffort</td><td>显式档位</td><td>逐顶点定档（FR-B1），能力不支持时 fail-loud</td></tr>
+    <tr><td class="mono">toolFilter</td><td><code>{allow?, deny?}</code></td><td>工具白名单/黑名单；拉起后经 <code>ctx.tools.restrict</code> 挂载收口</td></tr>
+    <tr><td class="mono">budget</td><td><code>{tokens?, wallclockMs?}</code></td><td>单顶点预算，超额熔断该顶点</td></tr>
+    <tr><td class="mono">lifecycle</td><td><span class="b ok">task</span> <span class="b warn">resident</span> <span class="b bad">ephemeral</span></td><td>任务型（完成即销毁）/ 常驻型 / <strong>探针型（新增第三档）</strong></td></tr>
+    <tr><td class="mono">contextMode</td><td><span class="b ok">spawn</span> <span class="b bad">fork</span> <span class="b info">reference</span></td><td>干净上下文 / 继承父上下文（未实现，P7 候选）/ 单向读入主线作隐藏参考（探针默认，P5）</td></tr>
+    <tr><td class="mono">maxDepth</td><td>整数</td><td>该顶点可再派生的最大深度</td></tr>
+    <tr><td class="mono">parent</td><td>顶点 id 或 null</td><td><strong>仅为权限与可见性的逻辑标注</strong>，不构成真实派生；多根即森林（T2a）</td></tr>
+    <tr><td class="mono">origin</td><td>self / spawned / joined</td><td>区分「本会话自身」「本次任务派生」「用户中途拉入的已存在会话」——只有 joined 才能成为平级根</td></tr>
+    <tr><td class="mono">echo / echoNotify</td><td>full·summary·<strong>handle</strong>·none / silent·<strong>tick</strong>·inline</td><td><strong>探针专用</strong>：产出回注策略与通知档（D6，见 <a href="#s3">§3</a>）</td></tr>
+    <tr><td class="mono">ttlMs</td><td>整数或 null</td><td>句柄与产物存活时长，到期转 L1（不取回）</td></tr>
+  </table>
+  </div>
+
+  <div class="scroll">
+  <table class="t">
+    <tr><th>边属性</th><th>取值</th><th>作用</th></tr>
+    <tr><td class="mono">from / to</td><td>顶点 id</td><td><strong>有向</strong>：A→B 不蕴含 B→A（半双工）</td></tr>
+    <tr><td class="mono">mode</td><td>request-reply / notify / board</td><td>语义；request-reply 绑定 correlationId 并自动生成反向应答边</td></tr>
+    <tr><td class="mono">wake</td><td><strong>never</strong> / on-reply / always</td><td>是否唤醒对方。<strong>默认 never</strong>——最强的防回声手段</td></tr>
+    <tr><td class="mono">hopTTL</td><td>整数（默认 2）</td><td>该信道允许的最大跳数</td></tr>
+    <tr><td class="mono">rate</td><td><code>{n, perMs}</code></td><td>超额降级为「投递不唤醒」，削峰不丢消息</td></tr>
+    <tr><td class="mono">budget</td><td><code>{tokens?}</code></td><td>超额<strong>熔断该边</strong>，不熔断整个团队</td></tr>
+  </table>
+  </div>
+
+  <h3 id="s23">2.3 六级拓扑谱系</h3>
+  <p>这六种形态<strong>不是六个功能，而是同一张完全图上不同的开放边集</strong>。</p>
+
+  <div class="tiers">
+    <div class="tier"><div class="id">T0<small>单体</small></div><div class="d">单会话，无子代理，E = ∅。<span class="b ok">默认可得</span><span class="g">判定：任务可在一个上下文窗口内闭环</span></div></div>
+    <div class="tier"><div class="id">T1a<small>单层领队</small></div><div class="d">星型：所有开放边从根射出，无横向边。<span class="b ok">默认可得</span><span class="g">判定：目标可预先分解为互不协商的子任务</span></div></div>
+    <div class="tier"><div class="id">T1b<small>多层领队</small></div><div class="d"><strong>树形外观，但执行底座仍是一层。</strong>父子是权限与可见性标注。<span class="b ok">默认可得</span><span class="g">判定：目标需先分层再分解</span></div></div>
+    <div class="tier"><div class="id">T1.5<small>混合</small></div><div class="d">树 + 某个子树内部网状：开该子团队内部的横向边，其余横向边全关。<span class="b ok">默认上限</span><span class="g">判定：整体需领队，但某子团队内部需协商</span></div></div>
+    <div class="tier"><div class="id">T2a<small>多领队并列</small></div><div class="d">森林 + 根间横向边。<strong>只能由「会话加入」达成</strong>；根间边只承载通报与协商，不承载任务指派。<span class="b warn">需会话加入</span><span class="g">判定：多个可独立成立的目标，各需领队但需互相通报</span></div></div>
+    <div class="tier gap"><div class="id">T2b<small>全扁平</small></div><div class="d">对等网状、无根。<strong>不提供。</strong>「用户只与唯一会话对话」的前提下无根形态在交互上不成立，P2 决策优先也没有落点。<span class="b bad">不提供</span></div></div>
+  </div>
+
+  <p class="ev">T1b / T1.5 / T2a 三者，六家竞品全部不支持——这就是本项目的目标区间，而它们在虚拟拓扑下共用一个恒为一层的执行底座。</p>
+
+  <h3 id="s24">2.4 默认形态与唯一的升级路径</h3>
+  <p><strong>默认：单会话内 ≤ T1.5，绝不新开会话。</strong>用户只与唯一的一个会话（领队）直接沟通；所有其它顶点都是该会话的子代理，对用户不可见地运行。T2a 不会自动出现。</p>
+  <div class="scroll">
+  <table class="t">
+    <tr><th>加入角色</th><th>语义</th><th>拓扑结果</th><th>边</th></tr>
+    <tr><td><strong>作为子节点</strong></td><td>新会话成为当前会话的下级，向领队汇报</td><td>保持 T1.5</td><td>开 leader ⇄ joined；joined 的横向边由策略决定</td></tr>
+    <tr><td><strong>作为平级领队</strong><br><span class="b ok">推荐</span></td><td>与当前会话平级，各自带自己的子图</td><td><strong>升级 T2a</strong></td><td>开 leader ⇄ leader（notify 或 request-reply，wake 默认 never）</td></tr>
+  </table>
+  </div>
+  <p>三条边界：① 加入的必须是<strong>已存在的会话</strong>——不提供「新建会话再加入」；② 升级 T2a 要重新走一次审批，但那是<strong>用户主动发起</strong>的，不是系统打断；③ 平级领队<strong>不互相指挥</strong>，任务指派一律沿树边向下。</p>
+
+  <h3 id="s25">2.5 成本为何不爆炸</h3>
+  <div class="scroll">
+  <table class="t">
+    <tr><th>维度</th><th>真实嵌套</th><th>虚拟拓扑（本方案）</th></tr>
+    <tr><td>执行底座深度</td><td>递归派生，深度无上界</td><td><strong>恒为 1</strong></td></tr>
+    <tr><td>顶点数量来源</td><td>运行时由各级 sub-captain 递归决定</td><td><strong>计划期一次性声明</strong>，开工前确定</td></tr>
+    <tr><td>成本可预测性</td><td>差：分支因子逐层相乘</td><td>好：成本 ≈ f(N 顶点, 开放边数)，<strong>计划期可算</strong></td></tr>
+    <tr><td>审批次数</td><td>1 + 每个子团队各一次</td><td><strong>恒为 1</strong></td></tr>
+    <tr><td>状态锁域 / 恢复对账</td><td>每层一套，存在嵌套死锁风险</td><td>单一锁域、单一一套</td></tr>
+    <tr><td>拓扑形状由什么决定</td><td>运行时的派生结构</td><td><strong>开放边集（纯声明）</strong></td></tr>
+  </table>
+  </div>
+  <p><strong>树是视图，不是机制。</strong></p>
+</section>
+
+<section id="s3">
+  <h2>3 · 六个正交旋钮</h2>
+  <p>「领队中心式」与「扁平分布式」被感知为两个物种，纯粹是因为现有实现把<strong>本应正交的五个维度</strong>都选到了同一端。concourse 把它们交还给使用者；第二册又补上了第六个维度——<strong>产出如何回到父上下文</strong>。</p>
+
+  <div class="scroll">
+  <table class="t">
+    <tr><th class="c">ID</th><th>维度</th><th>中央端 ↔ 对等端</th><th>本插件取值</th><th>探针固定值</th></tr>
+    <tr><td class="c mono">D1</td><td>控制权归属</td><td>中央调度 ↔ 自主认领</td><td>逐顶点/逐边可选</td><td>中央（父顶点指派）</td></tr>
+    <tr><td class="c mono">D2</td><td>顶点生命周期</td><td>任务型 ↔ 常驻型</td><td><code>task</code> / <code>resident</code></td><td><strong>ephemeral</strong>（可晋升）</td></tr>
+    <tr><td class="c mono">D3</td><td>通信拓扑</td><td>星型/树 ↔ 网状</td><td><strong>开放边集</strong>（不再是「结构怎么搭」）</td><td>无横向边（只有父→子提问 + 虚的返回边）</td></tr>
+    <tr><td class="c mono">D4</td><td>上下文策略</td><td>spawn ↔ 独立会话</td><td>spawn（fork 未实现）</td><td>spawn，可选 reference</td></tr>
+    <tr><td class="c mono">D5</td><td>失败恢复</td><td>中央重派 ↔ 各自重试</td><td>由领队决定</td><td><strong>不自动重试</strong></td></tr>
+    <tr><td class="c mono">D6</td><td><strong>产出回注策略</strong><br><span class="ev">本册新增</span></td><td>全文推送 ↔ 只留句柄</td><td>成员 <code>full</code>（推送）</td><td><strong>handle</strong>（拉取）+ <code>tick</code> 通知</td></tr>
+  </table>
+  </div>
+
+  <div class="callout info">
+    <span class="tag">D6 与 wake 不是一回事</span>
+    <p><code>wake</code> 作用在<strong>消息投递时</strong>，方向是发送方 → 接收方，防的是<em>打扰</em>与回声风暴；<code>echo</code> 作用在<strong>产出完成时</strong>，方向是产出方 → 父上下文，防的是<em>污染</em>。两者独立，四种组合都有意义（例如 <code>wake:never + echo:full</code> = 不叫醒你，但结果直接写进你上下文）。</p>
+  </div>
+
+  <p>反直觉但重要的推论：既然五维正交，<strong>「扁平分布式」不必等于「成员常驻」，「领队中心」也不必等于「成员用完即弃」</strong>。一个需要长期记忆的代码审查组可以是「D1 中央 + D2 常驻 + D3 星型」——现有插件无法表达，因为它们把 D2 焊死在任务型上。</p>
+</section>
+
+<section id="s4">
+  <h2>4 · 需求条目</h2>
+  <p>状态列见 <a href="#s0">§0.1</a> 的口径。每条需求都可映射回一条验收判据（<a href="#s7">§7</a>），否则视为无源需求。</p>
+
+  <h3 id="s41">4.1 拓扑（FR-A）</h3>
+  <div class="scroll">
+  <table class="t">
+    <tr><th class="c">ID</th><th>需求</th><th>判据 / 说明</th><th class="c">状态</th></tr>
+    <tr><td class="c mono">FR-A1</td><td><strong>拓扑即声明式数据</strong>：以「开放边集 + 顶点属性」完整声明，可由用户/模型读改；<strong>不得以代码常量固化任何一种组织形态</strong></td><td>六家竞品共同缺失的能力。由 <code>Concourse</code> schema + <code>team_topology</code>/<code>team_plan</code> 承载</td><td class="c"><span class="b ok">已实现</span></td></tr>
+    <tr><td class="c mono">FR-A2</td><td><strong>单会话默认上限 T1.5，零新会话</strong>：拉起团队时不得创建任何新的独立会话；用户只与唯一会话直接沟通</td><td>把「多窗口」从默认路径彻底移除</td><td class="c"><span class="b ok">已实现</span></td></tr>
+    <tr><td class="c mono">FR-A3</td><td><strong>会话加入是唯一的拓扑升级路径</strong>：仅当用户已持有多个先前独立工作过的会话且显式要求时，允许拉入并选择「子节点 / 平级领队」</td><td>加入对象必须是已存在会话；joined 顶点与 spawned 顶点在权限上区分</td><td class="c"><span class="b bad">未实现</span></td></tr>
+    <tr><td class="c mono">FR-A4</td><td><strong>单一审批闸门，且不可被下级打断</strong>：审批只发生在用户直接对话的会话里，全局只有一次；子节点不得拥有建队能力</td><td>用<strong>能力剥夺</strong>而非流程约定保证；member 最小工具集 = <code>team_send</code> + <code>team_status</code></td><td class="c"><span class="b warn">部分</span></td></tr>
+    <tr><td class="c mono">FR-A5</td><td><strong>不做真实嵌套 concourse</strong></td><td>任何层级效果只能通过开放边集裁剪表达（D-5）</td><td class="c"><span class="b ok">已实现</span></td></tr>
+    <tr><td class="c mono">FR-A6</td><td><strong>顶点数量与深度在计划期完全确定</strong>：开工前给出完整顶点集与开放边集，运行期不得派生计划外顶点；超预算/超并发<strong>在计划期报错</strong></td><td><code>validate</code> 产出 <code>TOO_MANY_VERTICES</code>/<code>BUDGET_OVERFLOW</code>/<code>DECLARED_TIER_MISMATCH</code></td><td class="c"><span class="b ok">已实现</span></td></tr>
+  </table>
+  </div>
+  <p class="ev">FR-A4 的「部分」是诚实标注：单测已锁定 member 最小集与生命周期闸门，但<strong>按身份分流注册</strong>需宿主提供会话身份面，当前仅根/领队上下文注册全量（见计划 §4 技术债 T-6）。</p>
+
+  <h3 id="s42">4.2 定档与建议（FR-B）</h3>
+  <div class="scroll">
+  <table class="t">
+    <tr><th class="c">ID</th><th>需求</th><th>判据 / 说明</th><th class="c">状态</th></tr>
+    <tr><td class="c mono">FR-B1</td><td><strong>逐顶点手动定档</strong>：每行的模型、强度、预算、工具范围、深度都可改，改动立即反映到总预算与拓扑校验</td><td>与竞品的关键差别：<strong>审批后仍可改</strong>（走显式「改拓扑」确认），而不是写死冻结</td><td class="c"><span class="b ok">已实现</span></td></tr>
+    <tr><td class="c mono">FR-B2</td><td><strong>自动定档建议（可一键接受）</strong>：给出 <code>{model, reasoningEffort, tokenTier, toolFilter, maxDepth, rationale[], confidence}</code></td><td>启发式出初值 + 可选 LLM 精修（D-6），失败回落启发式</td><td class="c"><span class="b ok">已实现</span><span class="ev">（启发式；LLM 精修待 P7）</span></td></tr>
+    <tr><td class="c mono">FR-B3</td><td><strong>建议必须可解释</strong>：输出含 <code>signals[]</code>，逐条说明命中了哪个难度维度</td><td>不可解释的建议不予采纳；借鉴 auto-router 最成功的一点</td><td class="c"><span class="b ok">已实现</span></td></tr>
+    <tr><td class="c mono">FR-B4</td><td><strong>fail-loud 校验，绝不静默降级</strong>：model 必须在 <code>listProviders()</code> 目录中；effort 必须被 <code>resolveModelInfo().efforts[]</code> 支持；越界直接拒绝并给可选值</td><td>与宿主 <code>resolveCallConfig</code> 不夹档的行为一致</td><td class="c"><span class="b ok">已实现</span></td></tr>
+    <tr><td class="c mono">FR-B5</td><td><strong>校准闭环</strong>：记录「建议 → 最终采纳值」的差异落盘为 <code>suggestions.jsonl</code>，周期性生成校准报告（哪些维度总被上调/下调）</td><td>auto-router 阈值 4→2 的教训：纯启发式不拿真实语料回归几乎必然校准失败</td><td class="c"><span class="b warn">部分</span><span class="ev">（语料回归在；suggestions.jsonl 与校准报告待 P7）</span></td></tr>
+    <tr><td class="c mono">FR-B6</td><td><strong>预设只是快捷填充，不是前提</strong>：任何任务都可完全不用预设而逐字段指定；预设缺失不得导致功能不可用</td><td>修正「预设优先 → 实际只剩两个选择」的退化</td><td class="c"><span class="b bad">未实现</span></td></tr>
+    <tr><td class="c mono">FR-B7</td><td><strong>决策台账：请求 vs 生效</strong>：每次派发记录「请求档位 → 实际生效 → 被忽略字段 <code>ignored[]</code> → 结果」，并提供成本反事实对照</td><td>对照必须读 <code>requested.model</code> 而非 <code>effective.model</code>；<code>inherit_ratio = 100%</code> 直接指向根因</td><td class="c"><span class="b ok">已实现</span></td></tr>
+  </table>
+  </div>
+
+  <h3 id="s43">4.3 通信硬约束（FR-C）</h3>
+  <p>回声风暴 = 唤醒 → 推理 → 回复 → 唤醒对方 → … 的<strong>正反馈</strong>。四个成因：自动唤醒放大（随跳数线性）、广播放大（随成员数指数）、无终止判定（不收敛）、无预算约束（失控不可逆）。下表全部为<strong>硬拒绝或硬降级</strong>，不是软警告。</p>
+
+  <div class="scroll">
+  <table class="t">
+    <tr><th class="c">ID</th><th>需求</th><th>判据 / 说明</th><th class="c">状态</th></tr>
+    <tr><td class="c mono">FR-C1</td><td><strong>开放边集裁剪</strong>：投递前校验 <code>(from,to) ∈ E</code>；违反即<strong>工具调用失败</strong>，附可达候选</td><td>deny-by-default；拒绝必留痕</td><td class="c"><span class="b ok">已实现</span></td></tr>
+    <tr><td class="c mono">FR-C2</td><td><strong>半双工</strong>：A→B 存在不蕴含 B→A；request-reply 声明两条边并绑定 correlationId</td><td>反向应答边自动生成、wake 默认 never</td><td class="c"><span class="b ok">已实现</span></td></tr>
+    <tr><td class="c mono">FR-C3</td><td><strong>跨边界闸门</strong>：跨越团队边界的边需显式声明 + 计划期一次审批</td><td>借鉴 team-rooms 的教训：闸门必须在数据写入口，不能只在工具外壳</td><td class="c"><span class="b bad">未实现</span><span class="ev">（单团队模型下暂无跨边界概念）</span></td></tr>
+    <tr><td class="c mono">FR-C4</td><td><strong>wake: never 为默认（最高优先级）</strong>：消息进邮箱不触发对方新一轮推理，对方在下一个自然步点读取</td><td>把事件驱动降级为轮询驱动，从根上消灭互相唤醒</td><td class="c"><span class="b ok">已实现</span></td></tr>
+    <tr><td class="c mono">FR-C5</td><td><strong>速率降级</strong>：窗口内超额即<strong>降级为「投递不唤醒」</strong>并留痕（削峰不丢消息）</td><td><code>RateLimiter</code> → <code>degrade</code>；台账记 <code>action:'degrade'</code></td><td class="c"><span class="b ok">已实现</span></td></tr>
+    <tr><td class="c mono">FR-C6</td><td><strong>广播只入共享板，不唤醒任何顶点</strong>：要唤醒必须逐个显式定向</td><td><code>mode:'board'</code> 时 deliver 的 wake 恒为 never</td><td class="c"><span class="b ok">已实现</span></td></tr>
+    <tr><td class="c mono">FR-C7</td><td><strong>跳数 TTL</strong>：消息携带 hops / ttl；<code>hops &gt; ttl</code> 只记录不投递并标记 <code>HOP_LIMIT</code></td><td>终止类约束的第一道</td><td class="c"><span class="b ok">已实现</span></td></tr>
+    <tr><td class="c mono">FR-C8</td><td><strong>静默判定（quiescence）</strong>：某信道连续 K 轮（默认 2）无新增事实（纯确认/致谢/重述）→ 冻结该信道，后续只入板</td><td>唯一能真正终止「礼貌性互推」的机制</td><td class="c"><span class="b bad">未实现</span><span class="ev">（P7）</span></td></tr>
+    <tr><td class="c mono">FR-C9</td><td><strong>幂等去重</strong>：按 <code>hash(from|to|correlationId|内容摘要)</code> 去重，重复投递丢弃并计数</td><td>重放与回环拦截</td><td class="c"><span class="b ok">已实现</span></td></tr>
+    <tr><td class="c mono">FR-C10</td><td><strong>通道预算 + 全局熔断</strong>：边超额只熔断该边；全局超额暂停所有 <code>wake≠never</code> 投递，<strong>仅人工恢复</strong></td><td>熔断后系统仍可被人类读取与干预，而非整体瘫痪</td><td class="c"><span class="b ok">已实现</span></td></tr>
+    <tr><td class="c mono">FR-C11</td><td><strong>回声计数与约束命中留痕</strong>：每条边统计 投递 / 唤醒 / 去重 / 命中约束；任何被拒投递都写流水</td><td>否则用户以为消息丢了——比引发风暴更难排查</td><td class="c"><span class="b ok">已实现</span></td></tr>
+    <tr><td class="c mono">FR-C12</td><td><strong>多层收口，权威判定在收件侧</strong>：① toolFilter 收口 ② <strong>收件箱准入权威判定</strong> ③ guard 兜底 ④ 全量留痕</td><td>第②层与「发送方是谁、用什么工具」完全解耦，语义上等价于服务层闸门</td><td class="c"><span class="b ok">已实现</span><span class="ev">（①②④；③在路线 A 下无对象）</span></td></tr>
+  </table>
+  </div>
+
+  <div class="callout ok">
+    <span class="tag">绕过矩阵是这一组需求的唯一验收方式</span>
+    <p>NFR-9 的反面教材是 team-rooms：闸门只存在于工具外壳里，导致命令入口与 Web 入口完全绕过。本项目的验收要求是<strong>穷举四条入口</strong>（工具调用 / 服务直调 / 伪造直发 / 裸运行时）发送闭边消息，全部被拦或留痕。当前状态：<strong>4/4 拦截，台账 deliver 0 条</strong>。</p>
+  </div>
+
+  <h3 id="s44">4.4 旁路探针（FR-D）</h3>
+  <p>定义：<strong>旁路探针（Probe）是当前会话内即时创建、上下文隔离、产出默认不回注、可遮蔽可丢弃的临时执行单元。</strong>它由一个旁路问题触发，交回一份摘要，留下一个可寻址的句柄。它是 concourse 图上的<strong>一个新顶点类</strong>，不是第二个插件（D-1）。</p>
+
+  <div class="callout warn">
+    <span class="tag">两条最容易被实现坏的纪律</span>
+    <p><strong>① 零回注是代码纪律，不是配置。</strong>只要任何一条代码路径把探针结果当成 tool result 返回，回注就发生了。必须把「绝不返回探针产出」写成该模块的硬不变量，并配自动化断言（AC-1）。</p>
+    <p><strong>② 「不污染」与「可丢弃」是两个机制。</strong>前者是准入控制（默认不回注），后者是事后收容（遮蔽已进入的内容）。把它们都叫「删除」是现有实现的通病，结果是两边都做不好。</p>
+  </div>
+
+  <div class="scroll">
+  <table class="t">
+    <tr><th class="c">ID</th><th>需求</th><th>判据 / 说明</th><th class="c">对应</th></tr>
+    <tr><td class="c mono">FR-D1</td><td>即时创建：人可在会话中途任意时刻创建探针并给出自然语言问题，<strong>无需预先声明拓扑或计划</strong></td><td>发起成本压到近零</td><td class="c">AC-1</td></tr>
+    <tr><td class="c mono">FR-D2</td><td>模型可自主发起（受配额约束）</td><td>模型在推理中发现「这与主线无关」时自行旁路</td><td class="c">AC-1</td></tr>
+    <tr><td class="c mono">FR-D3</td><td><strong>创建不阻塞主线</strong>：发起后主线继续，不等待探针完成</td><td>—</td><td class="c">AC-1</td></tr>
+    <tr><td class="c mono">FR-D4</td><td><strong>上下文隔离</strong>：工具调用、中间推理、失败尝试均不写入父会话</td><td>零回注纪律</td><td class="c">AC-1</td></tr>
+    <tr><td class="c mono">FR-D5</td><td>默认 <code>spawn</code>；<code>reference</code> 档为<strong>单向</strong>读入主线历史作为模型可见的隐藏参考（不渲染进探针 transcript）</td><td>方向单向，故不构成「污染提前」</td><td class="c">AC-1</td></tr>
+    <tr><td class="c mono">FR-D6</td><td><strong>预算熔断</strong>：超 token / 时长预算即终止，产出标记为不完整而非丢弃</td><td>探针预算要比成员小一个量级</td><td class="c">—</td></tr>
+    <tr><td class="c mono">FR-D7</td><td>产出两层：<strong>摘要</strong>（默认可见）与<strong>全文</strong>（仅按需）</td><td>token(产出) ≪ token(消耗)</td><td class="c">AC-2</td></tr>
+    <tr><td class="c mono">FR-D8</td><td><strong>句柄分配</strong>：每次完成分配稳定句柄，会话内唯一、可被人与模型引用</td><td>建议短且人可读：<code>p1, p2…</code></td><td class="c">AC-3</td></tr>
+    <tr><td class="c mono">FR-D9</td><td><strong>溯源保留</strong>：摘要中每个断言尽量保留依据（读了哪些文件/来源），取回时一并给出</td><td>摘要质量不足时仍可回溯</td><td class="c">—</td></tr>
+    <tr><td class="c mono">FR-D10</td><td><strong>D6 四档可配</strong>：full / summary / <strong>handle（默认）</strong> / none</td><td>—</td><td class="c">AC-2</td></tr>
+    <tr><td class="c mono">FR-D11</td><td><strong>通知档可配</strong>：silent / <strong>tick（默认）</strong> / inline</td><td>tick ≈ 15–25 token：模型知道「有这么一条」，但不知道内容</td><td class="c">AC-1 AC-2</td></tr>
+    <tr><td class="c mono">FR-D12</td><td><strong>回注比可观测</strong>：每次探针记录并上报 <code>echo_ratio</code></td><td>否则「不污染」是不可验收的口号</td><td class="c">AC-1</td></tr>
+    <tr><td class="c mono">FR-D13</td><td><strong>按句柄取回</strong>（<code>team_peek</code>），人与模型均可；单次取回有硬上限（默认 2000 token）</td><td>防止「取回」变成新的污染入口</td><td class="c">AC-3</td></tr>
+    <tr><td class="c mono">FR-D14</td><td><strong>silent 档的发现路径</strong>：<code>team_status</code> 返回可枚举的探针句柄列表</td><td>句柄注册表独立于对话流</td><td class="c">AC-3</td></tr>
+    <tr><td class="c mono">FR-D15</td><td><strong>四级丢弃</strong>：L1 不取回（默认）/ L2 遮蔽 / L3 撤销采用 / L4 硬删</td><td>每层不同机制、不同风险</td><td class="c">AC-4</td></tr>
+    <tr><td class="c mono">FR-D16</td><td><strong>遮蔽可恢复</strong>：遮蔽态在 UI 可查、可恢复；<strong>不重写、不删除会话日志</strong></td><td>遮蔽是可见性投影，不是删除</td><td class="c">AC-4</td></tr>
+    <tr><td class="c mono">FR-D17</td><td><strong>模型不得自我遮蔽／硬删</strong>：二者默认仅属于人，模型只能请求</td><td>人做遮蔽是<em>编辑</em>，模型做遮蔽是<em>隐瞒</em>，权限必须不同</td><td class="c">AC-4</td></tr>
+    <tr><td class="c mono">FR-D18</td><td><strong>丢弃留痕</strong>：L2/L3/L4 均写审计事件</td><td>否则越是被丢弃的内容越查不到它曾被丢弃</td><td class="c">AC-4</td></tr>
+    <tr><td class="c mono">FR-D19</td><td><strong>晋升 / 降级双向通道</strong>：探针可提升为常驻成员（保留身份与摘要/溯源），成员也可降回探针语义</td><td>「或者丢弃」的对偶是「或者留下」</td><td class="c">AC-5</td></tr>
+    <tr><td class="c mono">FR-D20</td><td><strong>名册内一等呈现</strong>：与成员同一份名册、同一套状态徽章；会话流内一行痕迹；探针<strong>必须挂在某顶点下</strong>、不进层级判定、无横向边、<strong>产出不得作为主线交付依据</strong></td><td>并发上限（默认 3）、模型配额、成本单列同属本条</td><td class="c">AC-5</td></tr>
+  </table>
+  </div>
+
+  <h3 id="s45">4.5 非功能需求（NFR）</h3>
+  <div class="scroll">
+  <table class="t">
+    <tr><th class="c">ID</th><th>需求</th><th>验收方式</th><th class="c">状态</th></tr>
+    <tr><td class="c mono">NFR-1</td><td><strong>惰性安装</strong>：未激活时零行为变更、零监听器、零注册</td><td>安装前后日志对比；<code>enabled !== true</code> 立即 return</td><td class="c"><span class="b ok">已实现</span></td></tr>
+    <tr><td class="c mono">NFR-2</td><td><strong>异常永不阻断对话</strong>：任何装配/评估失败都跳过并 warn，绝不 throw（避免宿主整体回滚插件 effect）</td><td>故障注入测试；<code>apply</code> 内每步独立 try/catch</td><td class="c"><span class="b ok">已实现</span></td></tr>
+    <tr><td class="c mono">NFR-3</td><td><strong>零美术资产</strong>：包内无 .png/.jpg/.svg/.gif，src 全域无 emoji 码位</td><td><code>verify:assets</code> 静态门禁（含负例 fixture）</td><td class="c"><span class="b ok">已实现</span></td></tr>
+    <tr><td class="c mono">NFR-4</td><td><strong>持久化与恢复</strong>：状态跨 DSH 重启保留；顶点/边/预算/台账可续</td><td>JSONL 回放集成测试；自动 id 以快照最大序号播种</td><td class="c"><span class="b ok">已实现</span></td></tr>
+    <tr><td class="c mono">NFR-5</td><td><strong>纯函数内核</strong>：拓扑校验、难度画像、建议生成、通信闸门均为零宿主依赖纯函数</td><td>kernel 覆盖率 ≥ 90%；<code>check:boundaries</code> 硬门禁</td><td class="c"><span class="b ok">已实现</span></td></tr>
+    <tr><td class="c mono">NFR-6</td><td><strong>fail-loud</strong>：非法 model / effort 直接拒绝，附可选值列表</td><td>契约测试</td><td class="c"><span class="b ok">已实现</span></td></tr>
+    <tr><td class="c mono">NFR-7</td><td><strong>不破坏原决策</strong>：向对话流注入建议时只追加、不改写、不拒绝</td><td>与 auto-router 同款测试</td><td class="c"><span class="b ok">已实现</span></td></tr>
+    <tr><td class="c mono">NFR-8</td><td><strong>来源白名单</strong>：只有 <code>source.kind === 'user'</code> 的消息可触发自动建议</td><td>注入放大回归测试</td><td class="c"><span class="b ok">已实现</span></td></tr>
+    <tr><td class="c mono">NFR-9</td><td><strong>硬约束落在数据准入口</strong>：不得只在外壳工具里校验；因不能修改宿主服务，等价落点是<strong>收件箱准入路径</strong></td><td>穷举四入口的绕过测试；未收口路径必须留痕</td><td class="c"><span class="b ok">已实现</span></td></tr>
+    <tr><td class="c mono">NFR-10</td><td><strong>权限凭据不可伪造</strong>：服务方法以活的 Agent 对象为准，不接受字符串 id</td><td>伪造调用被拒测试</td><td class="c"><span class="b ok">已实现</span></td></tr>
+    <tr><td class="c mono">NFR-11</td><td><strong>默认安全</strong>：模型自主发起与自我遮蔽默认关闭或受限，需显式开启</td><td>配置默认值断言</td><td class="c"><span class="b bad">未实现</span><span class="ev">（P5）</span></td></tr>
+    <tr><td class="c mono">NFR-12</td><td><strong>零外部依赖、单进程</strong>：不引入新运行时依赖，不要求第二端口/第二进程</td><td><code>dependencies</code> 清点；<code>pack-smoke</code></td><td class="c"><span class="b ok">已实现</span></td></tr>
+    <tr><td class="c mono">NFR-13</td><td><strong>零污染可证</strong>：提供可复现的上下文计量前后对比，而非口头承诺</td><td>端到端断言：探针跑 5 万 token，主线增长 0</td><td class="c"><span class="b bad">未实现</span><span class="ev">（P5）</span></td></tr>
+    <tr><td class="c mono">NFR-14</td><td><em>（共享）</em><strong>与 T0 兼容</strong>：探针机制在「单会话无子代理」下也必须可用</td><td>最重要的兼容性判据：探针适用面严格大于团队</td><td class="c"><span class="b bad">未实现</span><span class="ev">（P5）</span></td></tr>
+  </table>
+  </div>
+  <p class="ev">NFR-14（与 T0 兼容）是探针与团队共享的兼容性条款：探针机制必须在「单会话无子代理」下也可用，这正是它比团队拓扑更值得优先做的原因——适用面严格更大，实现成本严格更小。</p>
+</section>
+
+<section id="s5">
+  <h2>5 · UI 规格</h2>
+
+  <h3 id="s51">5.1 视觉原语（形状是语义的唯一载体）</h3>
+  <div class="scroll">
+  <table class="t">
+    <tr><th class="c">形状</th><th>含义</th><th>颜色（加速通道）</th><th>形状单独可辨</th></tr>
+    <tr><td class="c mono">●</td><td>活跃（正在推理 / 执行）</td><td>主色</td><td class="c">可辨（实心）</td></tr>
+    <tr><td class="c mono">○</td><td>空闲（就绪，等待任务）</td><td>中性灰</td><td class="c">可辨（空心）</td></tr>
+    <tr><td class="c mono">◆</td><td>阻塞（等待决策 / 依赖）</td><td>警示橙</td><td class="c">可辨（菱形）</td></tr>
+    <tr><td class="c mono">▸</td><td>运行中（任务）</td><td>主色</td><td class="c">可辨（方向性）</td></tr>
+    <tr><td class="c mono">✓</td><td>完成</td><td>成功绿</td><td class="c">可辨（语义自明）</td></tr>
+    <tr><td class="c mono">✗</td><td>失败</td><td>危险红</td><td class="c">可辨（语义自明）</td></tr>
+    <tr><td class="c mono">·</td><td>待启动</td><td>极淡灰</td><td class="c">可辨（最轻量）</td></tr>
+    <tr><td class="c mono">┄</td><td>探针（旁路）</td><td>主色虚线</td><td class="c">可辨（虚线 = 旁路）</td></tr>
+    <tr><td class="c mono">▰ ▱</td><td>进度 / 预算条</td><td>主色 + 底灰</td><td class="c">可辨（长度即语义）</td></tr>
+  </table>
+  </div>
+  <p>与官方面板的分歧点<strong>在「仅颜色」而不在「用了颜色」</strong>：官方对任务状态用四个彩色圆点，四个状态形状完全相同，灰度截图或纯文本转发后完全不可读。concourse 保留颜色，但形状必须单独可辨。</p>
+
+  <h3 id="s52">5.2 侧栏与计划卡</h3>
+  <pre class="wire">┌ CONCOURSE  release-v3                          ← L0 单行总览（P3）
+│ T1b 多层领队 · 7 顶点 · 深度 1 · 3 活跃
+│ 开放边 4/21   预算 ▰▰▰▰▰▰▱▱▱▱ 61%   回声 0   熔断 0
+├────────────────────────────────────────────────
+│ 待你决定 (1)                                    ← L1 决策优先（P2）
+│  ◆ T-7  修复范围超出 inScope
+│    [ 允许 ]  [ 改范围 ]  [ 换人 ]
+├────────────────────────────────────────────────
+│ 拓扑                              模型 / 强度    ← L2 拓扑图（文字树）
+│  ● captain                        opus-4    hi
+│  ├─◆ sub-lead-A                   sonnet   mid
+│  │  ├─○ w-1  schema               flash     lo
+│  │  └─● w-2  api                  flash     lo
+│  └─◆ sub-lead-B                   sonnet   mid
+│     └─○ w-3  tests                flash     lo
+│  ↑ 树形外观；底座中 7 个顶点均为本会话直接子代理
+│    实线=开放边，未画出的 17 条横向边=已关闭
+├────────────────────────────────────────────────
+│ 任务                          依赖    状态        ← L3 任务表
+│  T-1  设计 schema             —       ✓
+│  T-2  实现 API                T-1     ▸
+├────────────────────────────────────────────────
+│ ▸ 通信流水 (12)     ▸ 证据 (8)     ▸ 已隐藏 2 位  ← L4 折叠（P4）
+└────────────────────────────────────────────────</pre>
+
+  <p><strong>计划编辑器是唯一的审批界面</strong>——把「多次审批」压缩成「一次审批但信息完备」。拓扑建议（含依据）· 任务表（负责人/模型/强度/预算/依据）· 总预算与货币估算 · 通信边表（完全图 21 条 → 开放 4 条）· 会话加入入口 · 审批策略与<strong>显式列出的风险项</strong>。</p>
+
+  <div class="callout warn">
+    <span class="tag">P5「一次审批」的精确边界</span>
+    <p>运行期零<em>常规</em>审批，但以下动作<strong>必须确认</strong>：改拓扑（增删顶点/改边）· 终止某顶点 · 删除任务 · 修改预算 · 跨边界通信的首次启用。风险应当<strong>在计划卡上说出来</strong>，而不是运行中弹窗打断。</p>
+  </div>
+
+  <h3 id="s53">5.3 探针名册与一行痕迹</h3>
+  <pre class="wire">┌─ 团队与探针 ──────────────────────────── 3 探针 · 2 成员 ─┐
+│  成员
+│   ● captain            运行中   turns 12   ctx 41.2k
+│   ○ schema-designer    空闲     turns  4   ctx  9.8k
+│
+│  探针                                    ↻ 仅本会话可见
+│   ● p5  查一下 libuv 在 Windows 的...   运行中    4.1k
+│   ✓ p4  Vite 的 base 配置会不会...     已完成    2.3k
+│        └ 仅句柄 未回注 · 0.6%    [展开]
+│   ✓ p3  fast-glob 的 ignore 语义...    已完成    8.7k
+│        └ 已回注 1.2k 已进上下文  [遮蔽]
+│  ─────────────────────────────────────
+│  已丢弃                                                2
+└────────────────────────────────────────────────────────────┘
+
+  ◇ 探针 p4 · Vite 的 base 配置会不会影响子路径资源  ✓ 完成 · 2.3k tok · 未回注   [取回]
+  ↑ 这一行就是 tick 档的全部成本（约 15–25 token）；silent 档完全不出现</pre>
+  <p>三态徽章「已回注 / 仅句柄 / 已遮蔽」是这一屏存在的理由——<strong>没有它，用户无法知道模型此刻究竟看得见什么</strong>。探针与成员在同一份名册里（AC-5），但用分组与更小的视觉权重区分：同一等公民，不是同一量级。</p>
+
+  <h3 id="s54">5.4 挂载点与客户端工程约束</h3>
+  <div class="scroll">
+  <table class="t">
+    <tr><th class="mono">Slot</th><th>作用域</th><th>用途</th></tr>
+    <tr><td class="mono">sidebar.right.pane.tab</td><td>keyed / session</td><td><strong>右侧栏插面板的唯一正解</strong>（配 <code>sidebarRightTabs.register</code>）</td></tr>
+    <tr><td class="mono">shell.overlay</td><td>list / root</td><td>唯一明确给第三方加性注入的全框浮层（计划编辑器 / 探针详情）</td></tr>
+    <tr><td class="mono">conversation.chat.node</td><td>keyed / list</td><td>会话内计划卡与探针一行痕迹</td></tr>
+    <tr><td class="mono">conversation.session.header.actions</td><td>list / session</td><td>「新建探针」入口</td></tr>
+    <tr><td class="mono">sidebar / rightbar / root</td><td>single（已占用）</td><td><strong>不要碰</strong>——注册会整体遮蔽官方 UI</td></tr>
+  </table>
+  </div>
+  <p class="ev">三条实测约束：① React 18，客户端产物经 <code>window.__ModuleLoader__.load</code> 装载；② 自绘内联 SVG，不依赖宿主图标导出名；③ <code>@deepseek-ai/dsh-client-store</code> 未随 profile 安装，store 类型需自行声明。</p>
+</section>
+
+<section id="s6">
+  <h2>6 · 数据模型与事件</h2>
+
+  <h3>6.1 concourse 定义</h3>
+  <p>三个体现虚拟拓扑的字段：<code>substrate.depthAlwaysOne</code>、<code>edges[]</code> 未列出即关闭、顶点的 <code>origin</code>。</p>
+  <pre>{
+  "id": "release-v3",
+  "tier": "T1b",                       // T0|T1a|T1b|T1.5|T2a （T2b 不提供）
+  "substrate": { "depthAlwaysOne": true, "completeGraph": true },
+  "budget": { "tokens": 260000 },
+  "approval": "once",
+  "vertices": [
+    { "id": "captain", "origin": "self", "parent": null, "layer": 0,
+      "model": "…", "reasoningEffort": "high",
+      "lifecycle": "task", "contextMode": "spawn", "maxDepth": 0,
+      "toolFilter": { "deny": ["send_message"] },
+      "budget": { "tokens": 60000 } },
+    { "id": "sub-A", "origin": "spawned", "parent": "captain", "layer": 1 },
+    { "id": "w-1",   "origin": "spawned", "parent": "sub-A",   "layer": 2 }
+  ],
+  "edges": [                           // 开放边集；未列出者一律关闭
+    { "from": "captain", "to": "sub-A", "mode": "request-reply",
+      "wake": "on-reply", "hopTTL": 2, "rate": { "n": 3, "perMs": 600000 },
+      "budget": { "tokens": 40000 } },
+    { "from": "sub-A", "to": "w-1", "mode": "board", "wake": "never", "hopTTL": 1 }
+  ],
+  "tasks": [
+    { "id": "T-2", "subject": "实现 API", "assignee": "w-2",
+      "dependencies": ["T-1"], "profile": { "cognitive": 3, "breadth": 2 } }
+  ]
+}</pre>
+
+  <h3>6.2 Probe 记录（新增）</h3>
+  <div class="scroll">
+  <table class="t">
+    <tr><th class="mono">字段</th><th>类型</th><th>说明</th></tr>
+    <tr><td class="mono">id</td><td>string</td><td>句柄，会话内唯一。<code>p1, p2…</code></td></tr>
+    <tr><td class="mono">question</td><td>string</td><td>旁路问题原文</td></tr>
+    <tr><td class="mono">state</td><td>enum</td><td>draft / running / done / adopted / shadowed / promoted / discarded</td></tr>
+    <tr><td class="mono">parentVertex</td><td>string</td><td>挂载的父顶点 id，<strong>不允许为 null</strong></td></tr>
+    <tr><td class="mono">origin</td><td>human | model</td><td>触发方（配额策略依赖它）</td></tr>
+    <tr><td class="mono">echo / echoNotify</td><td>enum</td><td>回注策略与通知档</td></tr>
+    <tr><td class="mono">summary / fullText</td><td>string | null</td><td>摘要 / 全文（按需加载）</td></tr>
+    <tr><td class="mono">sources</td><td>array</td><td>溯源：文件路径 / URL / 会话引用，每条带「它是怎么被用到的」</td></tr>
+    <tr><td class="mono">usage / echoTokens</td><td>object / number</td><td>消耗与<strong>实际回注进父上下文的 token 数</strong>（算 echo_ratio）</td></tr>
+    <tr><td class="mono">createdAt / endedAt / expiresAt / shadowedAt</td><td>timestamp</td><td>生命周期时间戳</td></tr>
+    <tr><td class="mono">promotedTo</td><td>string | null</td><td>晋升后的成员 id</td></tr>
+  </table>
+  </div>
+  <p><strong>Probe 不是 Vertex 的子类</strong>：它借用 budget / model / toolFilter，但不进图的邻接表——没有出边，唯一入边来自父顶点；也不出现在任务 DAG 中（无 dependencies / acceptance / kind）。晋升时发生一次转换：创建真正的 Vertex 记录并把摘要/溯源转为初始记忆。</p>
+
+  <h3>6.3 事件（append-only，只记元数据不记正文）</h3>
+  <pre>concourse.created   {id, spec}
+concourse.approved  {id, by}
+vertex.started      {id, vertexId, childId}
+comm.deliver        {from, to, mode, wake, tokens}
+comm.reject         {from, to, reason, candidates?}
+comm.degrade        {from, to, reason}
+budget.consume      {from, to, tokens, result}
+probe.created       {id, parentVertex, origin, echo, echoNotify, budget}
+probe.completed     {id, usage, echoTokens, sourceCount, truncated}
+probe.adopted       {id, by, tokens}
+probe.shadowed      {id, by}      ← 必须与 discarded 区分
+probe.promoted      {id, by, memberId}
+probe.discarded     {id, by, level}
+
+注意：台账的可审计性不依赖内容，依赖操作——因此事件里不写正文。</pre>
+</section>
+
+<section id="s7">
+  <h2>7 · 验收判据</h2>
+
+  <h3 id="s71">7.1 团队层（V-1 … V-5）</h3>
+  <div class="scroll">
+  <table class="t">
+    <tr><th class="c">ID</th><th>命题</th><th>证据形态</th><th class="c">状态</th></tr>
+    <tr><td class="c mono">V-1</td><td>拓扑是可声明的数据：T1a / T1b / T1.5 由开放边集裁剪表达，执行底座深度恒为 1</td><td>fixture 矩阵 + 真机 T1a/T1b 冒烟</td><td class="c"><span class="b ok">达成</span></td></tr>
+    <tr><td class="c mono">V-2</td><td>每个顶点独立的 model / reasoningEffort / toolFilter 真实生效（台账 requested = effective）</td><td>运行时探针 + 装配透传测试</td><td class="c"><span class="b ok">达成</span></td></tr>
+    <tr><td class="c mono">V-3</td><td>闭边消息在<strong>收件侧</strong>被拦截并留痕；wake 默认 never；TTL / 去重 / 速率 / 预算熔断生效</td><td>四入口绕过矩阵 + 真机拦截原文</td><td class="c"><span class="b ok">达成</span></td></tr>
+    <tr><td class="c mono">V-4</td><td>全局一次审批：计划批准后运行期零组队审批打断</td><td>生命周期转换测试 + 作用域测试</td><td class="c"><span class="b ok">达成</span></td></tr>
+    <tr><td class="c mono">V-5</td><td>UI 零图片资产，形状单独可辨，单行总览 + 待决置顶</td><td>资产门禁 + jsdom 结构断言</td><td class="c"><span class="b ok">达成</span></td></tr>
+  </table>
+  </div>
+
+  <h3 id="s72">7.2 探针层（AC-1 … AC-5）</h3>
+  <div class="scroll">
+  <table class="t">
+    <tr><th class="c">ID</th><th>判据</th><th>怎么算通过</th><th class="c">状态</th></tr>
+    <tr><td class="c mono">AC-1</td><td><strong>旁路过程的零污染</strong></td><td>一次探针从发起到结束，主会话上下文长度不因它的探索过程而增长。可验证形式：探针跑掉 5 万 token，主线增长 0</td><td class="c"><span class="b bad">未开始</span></td></tr>
+    <tr><td class="c mono">AC-2</td><td><strong>摘要在默认档位也不自动进入</strong></td><td>探针完成后，默认配置下主模型不知道摘要内容；只知道「有这么一条，地址是 X」</td><td class="c"><span class="b bad">未开始</span></td></tr>
+    <tr><td class="c mono">AC-3</td><td><strong>模型可按地址主动取回</strong></td><td>主模型能通过一个工具按句柄把摘要读进上下文——且这次读取是它自己的决定，不是系统的</td><td class="c"><span class="b bad">未开始</span></td></tr>
+    <tr><td class="c mono">AC-4</td><td><strong>人可丢弃，且「遮蔽」与「删除」可区分</strong></td><td>UI 上有丢弃动作；丢弃后模型看不到；遮蔽态在 UI 仍可查、可恢复，硬删才有不可逆语义</td><td class="c"><span class="b bad">未开始</span></td></tr>
+    <tr><td class="c mono">AC-5</td><td><strong>一等公民的呈现与晋升通道</strong></td><td>探针在 UI 里的呈现形态与成员一致（同一份名册、同一套状态徽章），并可「提升」为常驻成员</td><td class="c"><span class="b bad">未开始</span></td></tr>
+  </table>
+  </div>
+
+  <h3 id="s73">7.3 量化判据（不接受口号）</h3>
+  <div class="scroll">
+  <table class="t">
+    <tr><th>指标</th><th>阈值</th><th>为什么是这个数</th></tr>
+    <tr><td><code>echo_ratio</code> = 回注 token / 探针消耗 token</td><td><strong>&lt; 1%</strong>（handle 档；tick 档实测约 0.1%）</td><td>零污染必须可计量，否则不可验收</td></tr>
+    <tr><td>单次取回上限</td><td><strong>默认 2000 token</strong>（可配）</td><td>防「取回」本身变成新的污染入口</td></tr>
+    <tr><td>tick 通知成本</td><td>15–25 token</td><td>20 token 换「模型知道该不该去取」，是四个数量级的杠杆</td></tr>
+    <tr><td>计划期容量校验</td><td>超并发/超预算在计划期报错，<strong>不运行到一半失败</strong></td><td>宿主默认 maxActiveSubagents = 8、maxDepth = 1</td></tr>
+    <tr><td>kernel 覆盖率</td><td>行/分支 <strong>≥ 90%</strong></td><td>纯函数内核是整个产品的信任基础</td></tr>
+    <tr><td>测试基线</td><td><strong>349/349</strong>（44 文件）</td><td>任何交付不得让数字下降</td></tr>
+  </table>
+  </div>
+</section>
+
+<section id="s8">
+  <h2>8 · 不做与延后</h2>
+  <div class="scroll">
+  <table class="t">
+    <tr><th>项</th><th>处置</th><th>理由</th></tr>
+    <tr><td>T2b 全扁平（无根网状）</td><td><span class="b bad">不提供</span></td><td>「用户只与唯一会话对话」前提下无根形态在交互上不成立</td></tr>
+    <tr><td>真实嵌套 concourse</td><td><span class="b bad">永不</span></td><td>不增表达力，且会引入运行期二次审批（D-5）</td></tr>
+    <tr><td>跨 DSH 实例房间</td><td><span class="b bad">永不</span></td><td>保持单进程假设（D-4）</td></tr>
+    <tr><td>与 nanmicoder 的兼容层 / 迁移桥</td><td><span class="b bad">不做</span></td><td>该插件将被卸载；<code>agent_teams_*</code> 命名空间不复用（D-9）</td></tr>
+    <tr><td>设置页面 / 可写配置 UI</td><td><span class="b bad">永不</span></td><td>配置只在插件配置文件里（§1.3）</td></tr>
+    <tr><td><code>contextMode: fork</code>（带父记忆 seed）</td><td><span class="b warn">延后 P7</span></td><td>MVP 只做 spawn；fork 需要父历史 seed 语义</td></tr>
+    <tr><td>LLM 精修建议</td><td><span class="b warn">延后 P7</span></td><td>启发式必须先在真实语料上站住（D-6：失败即回落）</td></tr>
+    <tr><td>飞行中改拓扑</td><td><span class="b warn">延后 P7</span></td><td>需走 P5 确认清单，先有稳定运行期</td></tr>
+    <tr><td>探针触发建议（模型何时该开探针）</td><td><span class="b warn">延后 P8+</span></td><td>系统性优化，不进首个探针版本</td></tr>
+    <tr><td>跨会话探针共享 / 与 ACP 压缩的交互</td><td><span class="b warn">延后</span></td><td>需先有稳定句柄注册表</td></tr>
+  </table>
+  </div>
+</section>
+
+<section id="s9">
+  <h2>9 · 需求溯源与决议</h2>
+
+  <h3>9.1 沿用的决议（第一册 D-1 … D-9）</h3>
+  <div class="scroll">
+  <table class="t">
+    <tr><th class="c">ID</th><th>议题</th><th>决议</th></tr>
+    <tr><td class="c mono">D-1</td><td>拓扑实现方式</td><td><strong>虚拟拓扑</strong>：在完全图上声明开放边集，执行底座恒为一层。<em>（实现改为路线 A，见 D-R1）</em></td></tr>
+    <tr><td class="c mono">D-2</td><td>是否使用颜色</td><td>加颜色，但<strong>形状是语义的唯一载体</strong>；严禁「仅颜色不同、形状相同」</td></tr>
+    <tr><td class="c mono">D-3</td><td>默认拓扑与升级路径</td><td>单会话 ≤ T1.5、零新会话；T2a 只能由「加入已存在会话」达成；T2b 不提供</td></tr>
+    <tr><td class="c mono">D-4</td><td>跨实例房间</td><td>不做</td></tr>
+    <tr><td class="c mono">D-5</td><td>嵌套 concourse</td><td>不允许（能力剥夺）</td></tr>
+    <tr><td class="c mono">D-6</td><td>自动建议实现</td><td>启发式出初值 + 可选 LLM 精修，失败回落启发式</td></tr>
+    <tr><td class="c mono">D-7</td><td>质量契约与任务板</td><td>复用官方任务板的 CAS 语义与 invariant，<strong>在其上叠加</strong>契约字段，不另起一套</td></tr>
+    <tr><td class="c mono">D-8</td><td>官方代码复用程度</td><td>尽量复用 —— <strong>已被 D-R1 取代</strong></td></tr>
+    <tr><td class="c mono">D-9</td><td>与 nanmicoder 兼容</td><td>不追求兼容；前缀缩短为 <code>team_*</code>，旧命名空间不复用</td></tr>
+  </table>
+  </div>
+
+  <h3>9.2 本版新增决议</h3>
+  <div class="scroll">
+  <table class="t">
+    <tr><th class="c">ID</th><th>议题</th><th>决议</th></tr>
+    <tr><td class="c mono">D-R1</td><td>底座复用 vs 自建（D-8 的修正）</td><td><strong>路线 A 自建组织层。</strong>R-9 provider 钩子链路经 P2 运行时探针证伪：官方 <code>spawnTeammate</code> 请求体只带 <code>{prompt,parent}</code>。concourse 自行经 <code>ctx.subagents.startActivation</code> 拉起顶点，自建顶点注册表、邮箱（收件侧权威）、任务板映射与 JSONL 持久化。<span class="ev">docs/decisions/D-P2-route.md</span></td></tr>
+    <tr><td class="c mono">D-10</td><td>零回注的实现路径</td><td>主路径 <code>ctx.subagents.start()</code> 不返回结果；提炼段用 <code>ctx.llm.stream()</code>（会话无涉）。<strong>不采用 <code>agent.inject</code></strong>——它进上下文</td></tr>
+    <tr><td class="c mono">D-11</td><td>遮蔽的实现路径</td><td>优先 <code>SurfaceOp.replace</code> 单节点替换（原文不删、UI 可见）；<strong>不依赖 <code>ctx.compaction</code></strong>（宿主平面不可用）。注意：摘要若落在 tool call/result 之间，两端配对会不平衡而被拒</td></tr>
+    <tr><td class="c mono">D-12</td><td>需求编号体系</td><td>统一为 FR-A（拓扑）/ FR-B（定档）/ FR-C（通信）/ FR-D（探针）+ NFR-1…14，见 §9.3 映射</td></tr>
+  </table>
+  </div>
+
+  <h3>9.3 编号映射（旧 → 新）</h3>
+  <div class="scroll">
+  <table class="t">
+    <tr><th>旧编号</th><th>新编号</th><th>差异</th></tr>
+    <tr><td class="mono">FR-2.1 … FR-2.6</td><td class="mono">FR-A1 … FR-A6</td><td>一一对应</td></tr>
+    <tr><td class="mono">FR-4.1 … FR-4.7</td><td class="mono">FR-B1 … FR-B7</td><td>一一对应</td></tr>
+    <tr><td class="mono">FR-5.A1–A3 / B1–B3 / C1–C3 / D1–D2 / E1–E2</td><td class="mono">FR-C1 … FR-C12</td><td>按「拓扑 / 唤醒 / 终止 / 预算 / 可观测」顺序重排为平铺编号（C11 = E1+E2 合并为「可观测性」，C12 = 四层收口）</td></tr>
+    <tr><td class="mono">FR-1.1 … FR-10.3（第二册）</td><td class="mono">FR-D1 … FR-D20</td><td>按「创建 / 隔离 / 产出 / 回注 / 取回 / 丢弃 / 晋升 / 边界与呈现」重排；原 FR-8.x（边界）与 FR-9.x/10.x（呈现与配额）合并为 FR-D20</td></tr>
+    <tr><td class="mono">NFR-1 … NFR-10（第一册）<br>NFR-1 … NFR-8（第二册）</td><td class="mono">NFR-1 … NFR-14</td><td>第一册 1–10 保留；第二册新增项去重后成为 11（默认安全）、12（零外部依赖并入「单进程」）、13（零污染可证）、14（与 T0 兼容）</td></tr>
+  </table>
+  </div>
+
+  <h3>9.4 实现证据索引</h3>
+  <div class="scroll">
+  <table class="t">
+    <tr><th>证据</th><th>位置</th></tr>
+    <tr><td>MVP 五命题归集与门禁总账</td><td class="mono">docs/mvp-exit-v0.1.0.md</td></tr>
+    <tr><td>R-9 provider 钩子探针（证伪证据链）</td><td class="mono">docs/spikes/R-9-provider-hook.md</td></tr>
+    <tr><td>路线 A 决议 / 0.2.1 运行时适配 / 0.2.0 修复批次</td><td class="mono">docs/decisions/D-P2-route.md · D-P3-runtime-0.2.1.md · D-0.2.0-test-fixes.md</td></tr>
+    <tr><td>语料回归（effort 96.3% / ±1 100% / tier 98.1%）</td><td class="mono">docs/corpus-regression-P1.md</td></tr>
+  </table>
+  </div>
+</section>
+
+<section id="s10">
+  <h2>10 · 待验证事项</h2>
+  <p>这些不是「待用户决定」，而是「待工程验证」——实现时必须逐条钉死，结论回写本文件。</p>
+  <div class="scroll">
+  <table class="t">
+    <tr><th class="c">#</th><th>待验证</th><th>影响</th><th>验证时机</th></tr>
+    <tr><td class="c mono">1</td><td><strong>零回注纪律</strong>是否被任何一条代码路径破坏（把探针 result 当 tool result 返回）</td><td>整条探针需求的成立前提</td><td>P5 第一步（可行性已由平台原语证实，风险从「能不能」变成「会不会做错」）</td></tr>
+    <tr><td class="c mono">2</td><td><strong>单条粒度的遮蔽</strong>：<code>SurfaceOp.replace</code> 是否支持 <code>startSeq === endSeq</code>；tool call/result 配对不平衡时的拒绝边界</td><td>AC-4 能否达成</td><td>P6（第二个有平台风险的里程碑）</td></tr>
+    <tr><td class="c mono">3</td><td><strong>子代理与 UI 投影不相容</strong>：<code>presentationMeta</code> 的生效条件把子代理排除在外</td><td>探针过程不能被工具层投影 → 必须由宿主插件读探针存储后自渲染</td><td>P5（已确证，按「不依赖工具层投影」设计）</td></tr>
+    <tr><td class="c mono">4</td><td><strong>UI 挂载的安装约束</strong>：客户端模块扫描只扫宿主 Loader 的行，预设里的行浏览器看不见</td><td>面板必须由宿主平面的 bundle patch 安装，限制分发方式</td><td>P5 打包时确认</td></tr>
+    <tr><td class="c mono">5</td><td><strong>宿主并发与深度上限</strong>的配置覆盖方式与超限行为</td><td>T2a 的 8 顶点很容易撞顶；决定计划期报错文案</td><td>P8 前</td></tr>
+    <tr><td class="c mono">6</td><td><strong>模型点位 tier 数据源</strong>：宿主 <code>LlmCatalogLike</code> 不提供价位档</td><td><code>suggest</code> 的 cheap/premium 目标档第一轮候选池必空</td><td>P7（已记入已知残留）</td></tr>
+  </table>
+  </div>
+
+  <div class="callout">
+    <span class="tag">需求变更纪律</span>
+    <p>实现中发现范围变化 → 回报出品人 → 回到本文件改需求 → 才改计划。不允许「顺手做了」。本文件的每次修订都在 git 提交信息里说明原因。</p>
+  </div>
+</section>
+
+<footer>
+  dsh-agent-teams-concourse · 需求文档 v2.0 · 2026-10-25<br>
+  合并自：docs/dsh-agent-teams-concourse-report.html（v1.2）· docs/dsh-side-inquiry-probe-report.html（v1.0）<br>
+  实现基线 0.2.0 · DSH 0.2.1-rc.2 · 测试 349/349 · 零美术资产
+</footer>
+
+</main>
+</div>
+</body>
+</html>

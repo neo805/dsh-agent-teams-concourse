@@ -2,7 +2,7 @@
 
 > 调研人：Captain（本人）直接精读全部源码（仅 5 个文件 / 30.8 KB，未压缩）
 > 版本：`0.1.2` · 作者仓库：https://github.com/snow930/dsh-team-auto-router
-> 安装位置：`C:\Users\KEI.NEO\.dsh\profiles\web\node_modules\dsh-team-auto-router`
+> 安装位置：`$DSH_HOME\profiles\web\node_modules\dsh-team-auto-router`
 > 许可证：MIT
 
 ---

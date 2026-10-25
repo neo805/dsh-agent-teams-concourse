@@ -11,7 +11,7 @@
  * 用法：node scripts/corpus-regression.mjs [--corpus <path>] [--report <path>]
  */
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { dirname, join, resolve } from 'node:path';
+import { dirname, join, relative, resolve, sep } from 'node:path';
 import { argv, exit } from 'node:process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
@@ -101,7 +101,8 @@ const pass = pct(effortExact, total) >= 50 && pct(effortNear, total) >= 85 && pc
 const md = [
   '# 语料回归报告（P1）',
   '',
-  `- 语料：\`${CORPUS}\`（${total} 条）`,
+  // 报告入库：只写仓库相对路径，绝不写绝对路径（COLLABORATION §11 隐私边界）
+  `- 语料：\`${relative(ROOT, CORPUS).split(sep).join('/')}\`（${total} 条）`,
   `- 时间：${new Date().toISOString()}`,
   `- 判定下限：effort exact ≥ 50% · effort ±1 ≥ 85% · tier exact ≥ 70%`,
   '',

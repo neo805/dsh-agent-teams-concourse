@@ -8,10 +8,10 @@
 
 | 缩写 | 包 | 版本 |
 | --- | --- | --- |
-| `P` | `C:\Users\KEI.NEO\.dsh\profiles\web\node_modules\dsh-palimpsest` | 0.2.1（`P\package.json:3`） |
-| `B` | `C:\Users\KEI.NEO\.dsh\profiles\web\node_modules\billion-context-dsh` | 0.2.27 |
-| `C` | `C:\Users\KEI.NEO\.dsh\profiles\web\node_modules\clearai-dsh` | 0.5.4 |
-| `E` | `C:\Users\KEI.NEO\.dsh\profiles\web\node_modules\dsh-effort-router` | 0.2.3 |
+| `P` | `$DSH_HOME\profiles\web\node_modules\dsh-palimpsest` | 0.2.1（`P\package.json:3`） |
+| `B` | `$DSH_HOME\profiles\web\node_modules\billion-context-dsh` | 0.2.27 |
+| `C` | `$DSH_HOME\profiles\web\node_modules\clearai-dsh` | 0.5.4 |
+| `E` | `$DSH_HOME\profiles\web\node_modules\dsh-effort-router` | 0.2.3 |
 
 两份副本的一致性：palimpsest / billion-context / effort-router 逐文件 SHA256 一致；clearai-dsh 两份的差异**仅在嵌套 `node_modules\zod`**（only-web 有大量 zod 源文件、`different` 为空、`only-desktop` 为空），即第一方文件无差异。
 

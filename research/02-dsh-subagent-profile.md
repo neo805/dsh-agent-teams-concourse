@@ -1,10 +1,10 @@
 # 02 · dsh-subagent-profile 深度逆向调研（一手精读）
 
 > 调研对象：`dsh-subagent-profile@0.5.1`（bundle 插件 / 双面插件：宿主面 + 浏览器面）
-> 安装位置：`C:\Users\KEI.NEO\.dsh\profiles\web\node_modules\dsh-subagent-profile`（源码级、未压缩）
+> 安装位置：`$DSH_HOME\profiles\web\node_modules\dsh-subagent-profile`（源码级、未压缩）
 > 仓库：https://github.com/muzyLink/dsh-subagent-profile · 许可证 MIT（`LICENSE`、`package.json:81`）
 > 规模事实：**61 个文件** = `index.mjs`(24.7KB) + `lib/client.js`(325KB/5391 行) + `lib/core/` **46 个 .mjs** + `presets/orchestrator-v2/` 5 文件 + 3 张截图 + LICENSE/package.json/README×2
-> 依赖事实：`dsh-subagent-profile@0.5.1` 已列入 `C:\Users\KEI.NEO\.dsh\profiles\web\package.json:19` 且在第 `dsh.profile.bundles` 列表内（`:40`）→ 本机实际加载中
+> 依赖事实：`dsh-subagent-profile@0.5.1` 已列入 `$DSH_HOME\profiles\web\package.json:19` 且在第 `dsh.profile.bundles` 列表内（`:40`）→ 本机实际加载中
 > 方法：`grep`/`read` 工具逐文件精读（带行号），关键结论附 `文件:行号`；`lib/client.js` 先 grep 定位（20+ 处命中点）再局部精读；`docs/screenshots/*.png` 经本地 OCR 复核 UI 文案；`~/.dsh/subagent-evolution/*` 实盘数据核对格式。
 > 未确认项一律显式标注 **未确认**，不做推测性断言。
 

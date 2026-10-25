@@ -1,11 +1,11 @@
 # DSH 插件宿主 API 表面技术底稿（agent-team 类插件可行性依据）
 
 - **目标版本**：DSH `0.2.0-rc.2`
-- **运行时**：`C:\Users\KEI.NEO\AppData\Local\Programs\DeepSeek Harness\resources\runtime`
+- **运行时**：`<DSH_INSTALL>\resources\runtime`
 - **官方包根目录**（本稿所有 `文件:行号` 的相对基准）：
-  `C:\Users\KEI.NEO\.dsh\profiles\node_modules\@deepseek-ai\`
+  `$DSH_HOME\profiles\node_modules\@deepseek-ai\`
   下称 `<PKG>`，例：`<PKG>\dsh-subagent\lib\types\index.d.ts`
-- **当前会话 profile**：`desktop`（`C:\Users\KEI.NEO\.dsh\profiles\desktop\node_modules\@deepseek-ai\` 只有 `cosmokit / dsh-toolkit / schemastery` 三个目录，**官方核心包不在 profile 里，而在 `profiles\node_modules\@deepseek-ai\`**）
+- **当前会话 profile**：`desktop`（`$DSH_HOME\profiles\desktop\node_modules\@deepseek-ai\` 只有 `cosmokit / dsh-toolkit / schemastery` 三个目录，**官方核心包不在 profile 里，而在 `profiles\node_modules\@deepseek-ai\`**）
 - **app.asar 路径不可直读**：`resources\app.asar\dsh` 经 `Test-Path` 判定为 `False`（asar 是打包容器，不是目录）。可读的未打包目录只有 `resources\app.asar.unpacked\dsh\node_modules\@deepseek-ai\`，其中仅 `dsh-desktop-host`、`dsh-session-log-export`、`libreoffice-kit*`。
 - 默认包数量：`<PKG>` 下共 **249** 个目录（含 cordis 家族与全部官方插件）。
 
@@ -1474,6 +1474,6 @@ export function apply(ctx) {
 | 官方示例插件 | `<PROFILE_WEB>\node_modules\@deepseek-ai\dsh-toolkit\**` |
 | 生产 agent-team 先例 | `<PROFILE_DESKTOP>\node_modules\@nanmicoder\dsh-agent-teams\**` |
 
-其中 `<PKG>` = `C:\Users\KEI.NEO\.dsh\profiles\node_modules\@deepseek-ai`，
-`<PROFILE_WEB>` = `C:\Users\KEI.NEO\.dsh\profiles\web`，
-`<PROFILE_DESKTOP>` = `C:\Users\KEI.NEO\.dsh\profiles\desktop`。
+其中 `<PKG>` = `$DSH_HOME\profiles\node_modules\@deepseek-ai`，
+`<PROFILE_WEB>` = `$DSH_HOME\profiles\web`，
+`<PROFILE_DESKTOP>` = `$DSH_HOME\profiles\desktop`。

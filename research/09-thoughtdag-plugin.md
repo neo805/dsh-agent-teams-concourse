@@ -1,6 +1,6 @@
 # dsh-thoughtdag 0.5.17 源码逆向分析报告
 
-> 分析对象：npm 包 `dsh-thoughtdag@0.5.17`（作者 Xia Chen / chatchan92，MIT），解压于 `C:\Users\KEI.NEO\AppData\Local\Temp\tdag\package\`。
+> 分析对象：npm 包 `dsh-thoughtdag@0.5.17`（作者 Xia Chen / chatchan92，MIT），解压于 `<TEMP>\tdag\package\`。
 > 上游单体仓库 `github.com/chenxiachan/thoughtdag`，`dsh/` 是插件端，其余是 Electron 桌面应用 + CLI。
 > 本报告所有行号以 `read` 工具行号为准（`lib/index.js` 共 1392 行）。凡未在本次分析中实读源码、仅依据 README/注释/外部描述得出的结论，一律显式标注 **【高置信度推断】** 并汇总到附录 A。
 
@@ -712,7 +712,7 @@ if (!trustedHosts.has(hostname)) return sendJson(res, 403, { error: 'untrusted H
 
 以下条目**未能在本次分析中独立核实**，正文中已按需标注 **【高置信度推断】**：
 
-1. **`ctx.sessionController` 的确切 API 形状**。工作区 `node_modules/@deepseek-ai/` 下有 `cordis`/`dsh-agent`/`dsh-session`/`dsh-llm`/`dsh-tools`/`dsh-subagent`/`dsh-experimental-agent-team` 等包，但**没有 `dsh-api-session-controller`**；DSH checkout 路径 `C:\Users\KEI.NEO\AppData\Local\Programs\DeepSeek Harness\resources\app.asar\dsh\` 在本机**不存在**（asar 未解包，`Test-Path` 返回 False）。因此 `fork({sessionId, atSeq})`、`prompt({requestId, sessionId, mode, content}, signal)`、`create({cwd})`、`modelCatalog()`、`resolveAgent(id)`、`selectModel(...)` 的**对象参数名与返回形状均取自本插件的调用点**，未经宿主侧源码确认。已独立确认的只有底层 `SessionStore.fork(source, boundary?, childSessionId?)`（`node_modules/@deepseek-ai/dsh-session/lib/types/index.d.ts:453-469`），其 `boundary` 为 inclusive seq。
+1. **`ctx.sessionController` 的确切 API 形状**。工作区 `node_modules/@deepseek-ai/` 下有 `cordis`/`dsh-agent`/`dsh-session`/`dsh-llm`/`dsh-tools`/`dsh-subagent`/`dsh-experimental-agent-team` 等包，但**没有 `dsh-api-session-controller`**；DSH checkout 路径 `<DSH_INSTALL>\resources\app.asar\dsh\` 在本机**不存在**（asar 未解包，`Test-Path` 返回 False）。因此 `fork({sessionId, atSeq})`、`prompt({requestId, sessionId, mode, content}, signal)`、`create({cwd})`、`modelCatalog()`、`resolveAgent(id)`、`selectModel(...)` 的**对象参数名与返回形状均取自本插件的调用点**，未经宿主侧源码确认。已独立确认的只有底层 `SessionStore.fork(source, boundary?, childSessionId?)`（`node_modules/@deepseek-ai/dsh-session/lib/types/index.d.ts:453-469`），其 `boundary` 为 inclusive seq。
 2. **`requestId` 如何进入 `user/message.source.rpcId`**。仅由监听端匹配逻辑反推（`lib/index.js:863`、`:890-932`），未读 controller 实现。
 3. **harness 自家审批面板的注册顺序与形式**。本报告只确认了「本插件 prepend + 不调 next 即抢占」（`node_modules/@deepseek-ai/cordis/lib/types/events.d.ts:67-77`、`:85`、`:103`）；宿主面板以什么 id/优先级注册无从核实。
 4. **`approval/request` 事件的完整 payload schema**。字段 `req.agent.id`、`req.callId`、`req.toolName`、`req.reason`、`req.signal` 是按本插件的消费点列举（`lib/index.js:773-793`），未见类型声明。

@@ -4,7 +4,7 @@
 >
 > 证据口径：每条结论后附 `绝对路径:行号`，或标注「实测」并给出调用与返回。凡本地源码无法确证者一律进附录 A，不臆造 API 名。
 >
-> 包根目录简写：**`<PKG>` = `C:\Users\KEI.NEO\.dsh\profiles\node_modules\@deepseek-ai\`**（249 个包，0.2.0-rc.2）。第三方插件路径写全。
+> 包根目录简写：**`<PKG>` = `$DSH_HOME\profiles\node_modules\@deepseek-ai\`**（249 个包，0.2.0-rc.2）。第三方插件路径写全。
 >
 > 撰写约束：本次调研的父会话被授予的 `subagent` 工具因 `maxDepth 1` 失败，故**全部证据为一手读取**，无二手转述。
 
@@ -149,7 +149,7 @@ inject(message: UserMessage): void;
 `billion-context-dsh` 的 nudge（「效率提示」）**并未**用 `agent.inject`。实现是 `agent/pre-step` 瀑布里返回到场消息：
 
 ```js
-// C:\Users\KEI.NEO\.dsh\profiles\web\node_modules\billion-context-dsh\dist\index.js:9652-9672
+// $DSH_HOME\profiles\web\node_modules\billion-context-dsh\dist\index.js:9652-9672
 ctx.on("agent/pre-step", async (payload, next) => {
   stripOrphanedSurfaceToolMessages(payload.agent.session);
   engine.resyncSettings();
@@ -369,7 +369,7 @@ DSH 本体**没有** `decompress`。可逆性来自「原文留在 append-only �
 
 服务方法与类型：
 
-- `@Remote('fork') fork(request: SessionForkRequest): Promise<SessionForkValue>`——运行时实测签名：`"@Remote('fork') fork(request: SessionForkRequest): Promise<SessionForkValue>"`（`cordis_inspect_query` → host `Service.listService` → `sessionController`；落地文件 `C:\Users\KEI.NEO\AppData\Local\Temp\dsh-spill-dwrlkG\session-f8d61c6e9336\73604b1227cd-cordis_inspect_query.txt:1081`，下称 **实测 spill 文件**）。
+- `@Remote('fork') fork(request: SessionForkRequest): Promise<SessionForkValue>`——运行时实测签名：`"@Remote('fork') fork(request: SessionForkRequest): Promise<SessionForkValue>"`（`cordis_inspect_query` → host `Service.listService` → `sessionController`；落地文件 `<TEMP>\dsh-spill-dwrlkG\session-f8d61c6e9336\73604b1227cd-cordis_inspect_query.txt:1081`，下称 **实测 spill 文件**）。
 - 类型（`<PKG>\dsh-api-session-controller\lib\types\types.d.ts:308-317`）：
 
 ```ts
@@ -599,7 +599,7 @@ export interface SessionTitleLlmRequestEventData {   // :21-34
 
 其上方注释（`:502-507`）说明 **token METER 留在宿主平面**（它拥有 context-meter 投影单位，那张表是进程级的；若归预设所有，meter 会变成「挂了哪些预设」的函数）。同文件 `:518-520` 注释：**子代理注册表及其后端留在宿主平面**（`subagents` 是进程单例，带跨会话查询面 `listChildren` / `followup`，由 host api-proxy 提供给浏览器）。
 
-本地 `desktop` profile 的覆写（`C:\Users\KEI.NEO\.dsh\profiles\desktop\cordis.patch.yml`，`preset-cordis` 段）里，`compaction` 组仍是三件套：
+本地 `desktop` profile 的覆写（`$DSH_HOME\profiles\desktop\cordis.patch.yml`，`preset-cordis` 段）里，`compaction` 组仍是三件套：
 
 ```yaml
 - id: compaction
@@ -810,7 +810,7 @@ Config { maxInlineTokens?: number }   // 省略即完全禁用保留
 
 ```
 (Omitted 31541 bytes. Full formatted result stored at:
-C:\Users\KEI.NEO\AppData\Local\Temp\dsh-spill-dwrlkG\session-f8d61c6e9336\73604b1227cd-cordis_inspect_query.txt.
+<TEMP>\dsh-spill-dwrlkG\session-f8d61c6e9336\73604b1227cd-cordis_inspect_query.txt.
 Use read with offset/limit, or grep this path to search within it.)
 ```
 
@@ -966,8 +966,8 @@ Session.append<T>(type: T, data: SessionEventMap[T], ...opts: ...): SessionEvent
 5. **`GenerateOptions.purpose` 是否接受自定义字符串**。类型上只有 `'compaction' | 'session-title'`（`dsh-llm\lib\types\types.d.ts:530`）。适配器对未知值的处理**未确证**；插件若要自定义辅助调用语义，**没有专用字段**，只能复用这两个值或不填。
 6. **`ctx.llm.stream()` 是否在任何适配器里隐含写 Session**。本次只确证了接缝层（`LlmRuntime.stream`）不接收 Session 参数；**未逐一审阅各 provider 适配器实现**（`dsh-llm-deepseek`、`dsh-llm-pi-ai` 等）。`sessionId` 字段的文档说「adapters may map it to model-hidden transport metadata」（`dsh-llm\lib\types\types.d.ts:520-524`），但**是否确实 model-hidden 未实测**。
 7. **`acp-kernel` 本体不在本机**。`billion-context-dsh` 的 devDep `acp-kernel@0.0.101`（`package.json:70`）才是真正的 ACP 引擎；本报告对其行为的所有描述都来自**适配层的类型文档与 README**，未经 kernel 源码验证。
-8. **实验性 Agent Teams 四个包未审阅**。`C:\Users\KEI.NEO\.dsh\staging-upgrade-20260929\node_modules\@deepseek-ai\` 下的 `dsh-experimental-agent-team` / `-tool-agent-team` / `-client-ui-agent-team` / `-agent-team-profile` 本次**完全未打开**。但注意：本机运行时的宿主平面上已存在 **`agentTeams` 服务**（实测 spill 文件 `agentTeams` 段）：`membership / listMembers / spawnTeammate / sendMessage / createTask / getTask / listTasks / updateTask / waitForChange / interrupt / tryMembership`，描述为「Agent Teams service backed by the exact live Lead Session log」。**该服务归属哪个包、是否即上述实验包、以及其成员产出是否回注 Lead 上下文，均未查证**——如果要在这个轴上继续，这是最该接着看的一块。
+8. **实验性 Agent Teams 四个包未审阅**。`$DSH_HOME\staging-upgrade-20260929\node_modules\@deepseek-ai\` 下的 `dsh-experimental-agent-team` / `-tool-agent-team` / `-client-ui-agent-team` / `-agent-team-profile` 本次**完全未打开**。但注意：本机运行时的宿主平面上已存在 **`agentTeams` 服务**（实测 spill 文件 `agentTeams` 段）：`membership / listMembers / spawnTeammate / sendMessage / createTask / getTask / listTasks / updateTask / waitForChange / interrupt / tryMembership`，描述为「Agent Teams service backed by the exact live Lead Session log」。**该服务归属哪个包、是否即上述实验包、以及其成员产出是否回注 Lead 上下文，均未查证**——如果要在这个轴上继续，这是最该接着看的一块。
 9. **`hideCompressToolPair` / `stripOrphanedSurfaceToolMessages` 的边界条件**。仅读了类型文档（`billion-context-dsh\dist\region.d.ts:240-284`），未读实现。
 10. **`compaction/summary` 的白名单校验清单本身**（`@deepseek-ai/dsh-session-format-v0-to-v1` 的允许成员列表）。ACP 的注释指认了问题，但**具体白名单未读**，因此「把自定义载荷塞进 `rawOutput` 是否永远安全」只能说有先例，不能说有保证。
 11. **`registerMessageProjection` 的用法**。`ctx.sessions.registerMessageProjection(projection)`（实测 spill 文件 `:1282`）与 `SessionMessageProjection` 类型本次未读；它似乎是「插件自有消息变更」的官方通道（对应 `SessionSurface.contentGeneration` 文档里的「plugin-owned message changes」），**很可能是比 surface replace 更合适的「改写模型可见消息」的原语**，但语义未确证。
-12. **本文所有「实测」若来自 `desktop` profile 的运行时**：注意本会话实际协议栈是 `desktop` profile 的 `preset-cordis` 覆写层，与该 profile 的 `web` 副本存在同步关系但**不保证等价**；`billion-context-dsh` 是**web profile 下安装**的第三方插件（`C:\Users\KEI.NEO\.dsh\profiles\web\node_modules\billion-context-dsh\`），在 desktop profile 是否同样挂载**未经运行验证**。
+12. **本文所有「实测」若来自 `desktop` profile 的运行时**：注意本会话实际协议栈是 `desktop` profile 的 `preset-cordis` 覆写层，与该 profile 的 `web` 副本存在同步关系但**不保证等价**；`billion-context-dsh` 是**web profile 下安装**的第三方插件（`$DSH_HOME\profiles\web\node_modules\billion-context-dsh\`），在 desktop profile 是否同样挂载**未经运行验证**。
