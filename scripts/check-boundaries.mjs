@@ -16,6 +16,7 @@
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { dirname, isAbsolute, join, normalize, relative, resolve, sep } from 'node:path';
 import { argv, cwd, exit } from 'node:process';
+import ts from 'typescript';
 
 /**
  * 各层允许的相对依赖目标（正向白名单）。
@@ -38,8 +39,41 @@ const RULES = {
   index: { allowDirs: ['index', 'kernel', 'host', 'service', 'tools'] },
 };
 
-const IMPORT_RE = /(?:import|export)\s+(?:[^'"]*?\s+from\s+)?['"]([^'"]+)['"]/g;
-const DYN_IMPORT_RE = /import\s*\(\s*['"]([^'"]+)['"]\s*\)/g;
+/**
+ * 用 TypeScript AST 提取静态依赖，覆盖 import/export/import=require/require()/import()。
+ * 非字面量动态依赖无法审计，交由调用方在受限层 fail-loud。
+ */
+function dependencySpecs(fileName, text) {
+  const source = ts.createSourceFile(
+    fileName,
+    text,
+    ts.ScriptTarget.Latest,
+    true,
+    fileName.endsWith('.tsx') ? ts.ScriptKind.TSX : ts.ScriptKind.TS,
+  );
+  const specs = [];
+  const dynamic = [];
+  const add = (node, label) => {
+    if (node !== undefined && ts.isStringLiteralLike(node)) specs.push(node.text);
+    else dynamic.push(label);
+  };
+  const visit = (node) => {
+    if ((ts.isImportDeclaration(node) || ts.isExportDeclaration(node)) && node.moduleSpecifier) {
+      add(node.moduleSpecifier, 'import/export');
+    } else if (ts.isImportEqualsDeclaration(node) && ts.isExternalModuleReference(node.moduleReference)) {
+      add(node.moduleReference.expression, 'import=require');
+    } else if (ts.isCallExpression(node)) {
+      if (node.expression.kind === ts.SyntaxKind.ImportKeyword) {
+        add(node.arguments[0], 'import()');
+      } else if (ts.isIdentifier(node.expression) && node.expression.text === 'require') {
+        add(node.arguments[0], 'require()');
+      }
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(source);
+  return { specs, dynamic };
+}
 
 function parseRoot() {
   const i = argv.indexOf('--root');
@@ -57,17 +91,6 @@ function layerOf(srcRoot, file) {
 function isInside(srcRoot, target) {
   const rel = relative(srcRoot, target);
   return rel.length > 0 && rel !== '..' && !rel.startsWith(`..${sep}`) && !isAbsolute(rel);
-}
-
-/** 收集一个文件里的全部 import 说明符。 */
-function specifiers(text) {
-  const out = [];
-  for (const re of [IMPORT_RE, DYN_IMPORT_RE]) {
-    re.lastIndex = 0;
-    let m;
-    while ((m = re.exec(text)) !== null) out.push(m[1]);
-  }
-  return out;
 }
 
 /** @returns {string[]} 违规清单（人类可读）。 */
@@ -92,9 +115,16 @@ export function scan(root) {
       if (!/\.(ts|tsx|js|mjs)$/.test(entry)) continue;
       const layer = layerOf(srcRoot, full);
       const rule = RULES[layer];
-      if (!rule) continue; // 未登记的新层不在白名单内，其出边不构成已授权依赖
       const rel = relative(root, full);
-      for (const spec of specifiers(readFileSync(full, 'utf8'))) {
+      if (!rule) {
+        violations.push(`${rel} — 未登记层 "${layer}"（默认拒绝；新增层必须先登记依赖规则）`);
+        continue;
+      }
+      const deps = dependencySpecs(full, readFileSync(full, 'utf8'));
+      for (const label of deps.dynamic) {
+        violations.push(`${rel} — 无法静态判定 ${label} 的依赖目标（受限层 fail-loud）`);
+      }
+      for (const spec of deps.specs) {
         if (spec.startsWith('.') || spec.startsWith('/') || /^[A-Za-z]:/.test(spec)) {
           // 相对/绝对路径：必须留在 src 内，且目标层在正向白名单中。
           const target = normalize(join(dirname(full), spec));

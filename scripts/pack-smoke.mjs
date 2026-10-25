@@ -5,13 +5,14 @@
  * pnpm 定位：经 `pnpm pack:smoke` 运行时取 process.env.npm_execpath；否则回退 PNPM_MJS / PATH 的 pnpm。
  */
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, readdirSync, readFileSync, rmSync, symlinkSync } from 'node:fs';
+import { mkdtempSync, readdirSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { cwd, exit } from 'node:process';
 import { runInNewContext as vmRunInNewContext } from 'node:vm';
 import { packedFileIssues } from './pack-contract.mjs';
+import { linkDeclaredDependencies } from './pack-deps.mjs';
 
 const root = cwd();
 const tmp = mkdtempSync(join(tmpdir(), 'concourse-pack-'));
@@ -32,9 +33,9 @@ try {
   execFileSync('tar', ['-xzf', join(tmp, found), '-C', tmp], { stdio: 'pipe' });
 
   const pkgDir = join(tmp, 'package');
-  // 依赖解析：解包目录无 node_modules，链接工作区依赖树模拟安装后形态
-  // （zod 走 dependencies、@deepseek-ai/* 走 peerDeps 宿主提供，冒烟只验证入口可装载）。
-  symlinkSync(join(root, 'node_modules'), join(pkgDir, 'node_modules'), 'junction');
+  const pkg = JSON.parse(readFileSync(join(pkgDir, 'package.json'), 'utf8'));
+  // 只链接 manifest 声明的 dependencies + peerDependencies；不暴露工作区 dev/间接依赖。
+  linkDeclaredDependencies(root, join(pkgDir, 'node_modules'), pkg);
   const mod = await import(pathToFileURL(join(pkgDir, 'dist/index.js')).href);
   if (mod.name !== 'dsh-agent-teams-concourse') throw new Error(`入口 name 契约破坏：${mod.name}`);
   if (typeof mod.apply !== 'function') throw new Error('入口缺少 apply()');
@@ -112,7 +113,6 @@ try {
   }
   if ('id' in slotDefs[0]) throw new Error('client panel 不得沿用页型 id 字段');
 
-  const pkg = JSON.parse(readFileSync(join(pkgDir, 'package.json'), 'utf8'));
   if (!Array.isArray(pkg.files) || pkg.files.length === 0) throw new Error('package.json files 清单为空');
   const issues = packedFileIssues(pkgDir);
   if (issues.length > 0) throw new Error(`解包文件契约失败：${issues.join('；')}`);

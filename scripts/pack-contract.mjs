@@ -13,6 +13,7 @@ export const REQUIRED_PACK_FILES = Object.freeze([
   'dist/index.js',
   'dist/index.d.ts',
   'dist/client/index.cjs',
+  'dist/client/index.d.cts',
 ]);
 
 /**

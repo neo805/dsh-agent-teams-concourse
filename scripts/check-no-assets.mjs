@@ -25,47 +25,104 @@ function parseRoot() {
   return resolve(i >= 0 && argv[i + 1] ? argv[i + 1] : cwd());
 }
 
+/** package.json files 的发布集合（目录与简单 glob 以所在目录近似；精确文件逐个检查）。 */
+function publishedEntries(root) {
+  const dirs = [];
+  const files = [];
+  let pkg;
+  try {
+    pkg = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8'));
+  } catch {
+    return { dirs, files };
+  }
+  if (!Array.isArray(pkg.files)) return { dirs, files };
+  for (const raw of pkg.files) {
+    if (typeof raw !== 'string' || raw.trim().length === 0) continue;
+    const entry = raw.replace(/^\.\//, '');
+    const globAt = entry.search(/[*?[]/);
+    if (globAt >= 0) {
+      const slash = entry.lastIndexOf('/', globAt);
+      if (slash < 0) {
+        // 根级 glob（如 *.svg）：只匹配根本身这一层，避免递归扫描整个仓库。
+        const re = new RegExp(
+          `^${entry.replace(/[.+^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*')}$`,
+        );
+        for (const name of readdirSync(root)) {
+          if (re.test(name)) {
+            const full = join(root, name);
+            if (statSync(full).isFile()) files.push(full);
+          }
+        }
+      } else {
+        dirs.push(resolve(root, entry.slice(0, slash)));
+      }
+      continue;
+    }
+    const candidate = resolve(root, entry);
+    const rel = relative(root, candidate);
+    if (rel.startsWith('..') || rel === '') continue;
+    try {
+      if (statSync(candidate).isDirectory()) dirs.push(candidate);
+      else files.push(candidate);
+    } catch {
+      // 不存在的 files 条目由 pack 契约单独负责；这里只检查真实存在的发布物。
+    }
+  }
+  return { dirs, files };
+}
+
 /**
- * 同时扫描源码与实际发布目录 dist（含图片文件与文本中的 emoji）。
+ * 扫描源码/产物（图片 + emoji）以及 package.json files 实际发布集合（图片）。
  * @returns {string[]} 命中的违规清单（人类可读）。
  */
 export function scan(root) {
   const violations = [];
-  const roots = [join(root, 'src'), join(root, 'dist')].filter((dir) => {
+  const sourceRoots = [join(root, 'src'), join(root, 'dist')].filter((dir) => {
     try {
       return statSync(dir).isDirectory();
     } catch {
       return false;
     }
   });
+  const published = publishedEntries(root);
 
-  /** @param {string} dir */
-  function walk(dir) {
+  /** @param {string} dir @param {boolean} checkEmoji */
+  function walk(dir, checkEmoji) {
     for (const entry of readdirSync(dir)) {
       const full = join(dir, entry);
       const rel = relative(root, full);
       if (statSync(full).isDirectory()) {
-        walk(full);
+        walk(full, checkEmoji);
         continue;
       }
-      const ext = extname(entry).toLowerCase();
-      if (IMAGE_EXT.has(ext)) {
-        violations.push(`${rel} — 图片文件（NFR-3 禁止打包美术资产）`);
-        continue;
-      }
-      if (TEXT_EXT.has(ext)) {
-        const text = readFileSync(full, 'utf8');
-        const lines = text.split('\n');
-        for (let n = 0; n < lines.length; n++) {
-          if (EMOJI.test(lines[n])) {
-            violations.push(`${rel}:${n + 1} — emoji 码位（允许 25A0–25FF / 2700–27BF 形状字符，禁止 1F000–1FAFF / FE0F / 200D）`);
-          }
-        }
+      inspect(full, rel, checkEmoji);
+    }
+  }
+
+  function inspect(full, rel, checkEmoji) {
+    const ext = extname(full).toLowerCase();
+    if (IMAGE_EXT.has(ext)) {
+      violations.push(`${rel} — 图片文件（NFR-3 禁止打包美术资产）`);
+      return;
+    }
+    if (!checkEmoji || !TEXT_EXT.has(ext)) return;
+    const text = readFileSync(full, 'utf8');
+    const lines = text.split('\n');
+    for (let n = 0; n < lines.length; n++) {
+      if (EMOJI.test(lines[n])) {
+        violations.push(`${rel}:${n + 1} — emoji 码位（允许 25A0–25FF / 2700–27BF 形状字符，禁止 1F000–1FAFF / FE0F / 200D）`);
       }
     }
   }
 
-  for (const dir of roots) walk(dir);
+  for (const dir of sourceRoots) walk(dir, true);
+  const seen = new Set(sourceRoots);
+  for (const dir of published.dirs) {
+    if (seen.has(dir)) continue;
+    seen.add(dir);
+    walk(dir, false);
+  }
+  for (const file of published.files) inspect(file, relative(root, file), false);
   return violations;
 }
 
