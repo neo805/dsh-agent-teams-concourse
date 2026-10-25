@@ -34,6 +34,16 @@ export const VertexBudget = z.object({
   tokens: z.number().int().positive().optional(),
   wallclockMs: z.number().int().positive().optional(),
 });
+
+/** concourse 级预算（当前只支持 tokens；未知键检查直接读取本 shape）。 */
+export const ConcourseBudget = z.object({
+  tokens: z.number().int().positive(),
+});
+
+/** 单边预算（当前只支持 tokens）。 */
+export const EdgeBudget = z.object({
+  tokens: z.number().int().positive(),
+});
 export type VertexBudget = z.infer<typeof VertexBudget>;
 
 export const Vertex = z.object({
@@ -77,7 +87,7 @@ export const Edge = z.object({
   wake: Wake.default('never'),
   hopTTL: z.number().int().min(1).default(2),
   rate: Rate.optional(),
-  budget: z.object({ tokens: z.number().int().positive() }).optional(),
+  budget: EdgeBudget.optional(),
 });
 export type Edge = z.infer<typeof Edge>;
 
@@ -116,7 +126,7 @@ export const Concourse = z.object({
   id: z.string().min(1),
   tier: Tier,
   substrate: Substrate.default({ depthAlwaysOne: true, completeGraph: true }),
-  budget: z.object({ tokens: z.number().int().positive() }).optional(),
+  budget: ConcourseBudget.optional(),
   /** 固定 once：一次计划审批，运行期零审批（FR-2.4 / P5）。 */
   approval: z.literal('once').default('once'),
   vertices: z.array(Vertex).min(1),

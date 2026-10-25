@@ -10,6 +10,7 @@
  * 无预算登记的边 consume 只记全局账。
  */
 import { directedPairKey } from '../keys.js';
+import type { Concourse } from '../topology/schema.js';
 
 export class BudgetBook {
   /** 各边剩余预算（edgeKey → remaining）。 */
@@ -123,4 +124,23 @@ export class BudgetBook {
   resumeGlobal(): void {
     this.globalFused = false;
   }
+}
+
+/** 当前边集声明的边预算（内部键使用统一的有向 tuple framing）。 */
+export function edgeBudgetsOf(c: Concourse): Record<string, number> {
+  const edgeBudgets: Record<string, number> = {};
+  for (const e of c.edges) {
+    if (e.budget?.tokens !== undefined) {
+      edgeBudgets[BudgetBook.edgeKey(e.from, e.to)] = e.budget.tokens;
+    }
+  }
+  return edgeBudgets;
+}
+
+/** 从 concourse 初始预算构造账本；live runtime 与 replay 共用此入口。 */
+export function budgetBookFromConcourse(c: Concourse): BudgetBook {
+  return new BudgetBook({
+    edgeBudgets: edgeBudgetsOf(c),
+    ...(c.budget?.tokens !== undefined ? { globalBudget: c.budget.tokens } : {}),
+  });
 }

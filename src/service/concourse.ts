@@ -13,15 +13,10 @@
  */
 import { randomUUID } from 'node:crypto';
 import { ZodError } from 'zod';
-import { Edge, parseConcourse, type Concourse, type Vertex } from '../kernel/topology/schema.js';
-import { validateConcourse } from '../kernel/topology/validate.js';
-import {
-  findUnknownKeyIssues,
-  zodErrorSummary,
-  zodErrorToIssues,
-  type SchemaIssue,
-} from '../kernel/topology/issues.js';
-import { normalizeConcourseBudgets } from '../kernel/budget/normalize.js';
+import { Edge, type Concourse, type Vertex } from '../kernel/topology/schema.js';
+import { analyzeConcourse } from '../kernel/topology/analyze.js';
+import { zodErrorSummary, zodErrorToIssues, type SchemaIssue } from '../kernel/topology/issues.js';
+import { estimateConcourseBudget } from '../kernel/budget/tokens.js';
 import { BudgetBook } from '../kernel/comms/budget.js';
 import type { Catalog, Substrate, VertexHandle, VertexStart } from '../host/contracts.js';
 import type { EdgeMode, Wake } from '../kernel/topology/schema.js';
@@ -72,12 +67,15 @@ export interface ConcourseRecord {
   readonly concourse: Concourse;
   readonly status: ConcourseStatus;
   readonly createdAt: number;
+  /** 创建时由唯一分析管线得到的预算估算（token，非计费）。 */
+  readonly estimatedTokens: number;
 }
 
 interface Entry {
   concourse: Concourse;
   status: ConcourseStatus;
   readonly createdAt: number;
+  readonly estimatedTokens: number;
   handles: VertexHandle[];
   runtime: ConcourseRuntime;
   /** origin=self 顶点的 durable 领队 session id。 */
@@ -165,6 +163,7 @@ export class ConcourseService {
         concourse: rc.concourse,
         status: rc.status,
         createdAt: rc.createdAt,
+        estimatedTokens: Math.ceil(estimateConcourseBudget(rc.concourse).total),
         handles: [...rc.handles],
         ...(rc.rootSessionId !== undefined ? { rootSessionId: rc.rootSessionId } : {}),
         runtime: { ...createRuntime(rc.concourse, { now: this.now }), budget: rc.budget },
@@ -188,26 +187,17 @@ export class ConcourseService {
   create(spec: unknown): ConcourseRecord {
     // spec 缺 id 时由注入 idGen 生成（zod 要求 id 非空，先补后解析）
     const withId = this.ensureId(spec);
-    // F2（2026-10-18 真机测试）：zod 默认 strip 未知键，spec 内笔误会静默丢字段；
-    // parse 前逐层扫描未知键，命中即并入 issues fail-loud（附 did-you-mean）。
-    const unknownKeyIssues = findUnknownKeyIssues(withId);
-    let concourse: Concourse;
-    try {
-      concourse = parseConcourse(withId);
-    } catch (err) {
-      if (err instanceof ZodError) {
-        // F4：不再把 ZodError.message（多行 JSON）拼进中文句子，结构化 issues 返回
-        // F2：未知字段与结构错误一并返回（笔误往往同时导致「缺必填」）
-        throw new ConcourseError(
-          'INVALID_SPEC',
-          `concourse 结构非法：${zodErrorSummary(err)}`,
-          [...unknownKeyIssues, ...zodErrorToIssues(err)],
-        );
-      }
-      throw err;
+    // F2/F4：与 preview 共用唯一分析管线（未知字段、结构、预算规范化、语义）。
+    const analysis = analyzeConcourse(withId);
+    if (analysis.concourse === undefined) {
+      throw new ConcourseError(
+        'INVALID_SPEC',
+        `concourse 结构非法：${analysis.issues[0]?.message ?? '结构非法（无详情）'}`,
+        analysis.issues,
+      );
     }
-    concourse = normalizeConcourseBudgets(concourse);
-    const issues = [...unknownKeyIssues, ...validateConcourse(concourse)];
+    const concourse = analysis.concourse;
+    const issues = analysis.issues;
     if (issues.length > 0) {
       throw new ConcourseError(
         'INVALID_SPEC',
@@ -229,6 +219,7 @@ export class ConcourseService {
       concourse,
       status: 'draft',
       createdAt: this.now(),
+      estimatedTokens: Math.ceil(analysis.estimate?.total ?? 0),
       handles: [],
       runtime: createRuntime(concourse, { now: this.now }),
     };
@@ -630,7 +621,12 @@ export class ConcourseService {
   }
 
   private recordOf(entry: Entry): ConcourseRecord {
-    return { concourse: entry.concourse, status: entry.status, createdAt: entry.createdAt };
+    return {
+      concourse: entry.concourse,
+      status: entry.status,
+      createdAt: entry.createdAt,
+      estimatedTokens: entry.estimatedTokens,
+    };
   }
 
   /** 状态转换闸门：非法转换 throw ILLEGAL_TRANSITION；进行中的 approve 阻塞竞争转换。 */

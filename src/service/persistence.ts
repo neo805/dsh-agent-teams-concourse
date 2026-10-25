@@ -9,7 +9,11 @@
  */
 import { appendFileSync, existsSync, mkdirSync, readFileSync } from 'node:fs';
 import { dirname } from 'node:path';
-import { BudgetBook } from '../kernel/comms/budget.js';
+import {
+  BudgetBook,
+  budgetBookFromConcourse,
+  edgeBudgetsOf,
+} from '../kernel/comms/budget.js';
 import { closeEdge, openEdge, withReverseAck } from '../kernel/topology/edges.js';
 import { parseConcourse, type Concourse, type Edge } from '../kernel/topology/schema.js';
 import type { VertexHandle } from '../host/contracts.js';
@@ -106,17 +110,6 @@ export interface ReplayState {
   readonly concourses: readonly ReplayConcourse[];
 }
 
-/** 当前边集声明的边预算（内部键使用 BudgetBook 的统一 framing）。 */
-export function edgeBudgetsOf(c: Concourse): Record<string, number> {
-  const edgeBudgets: Record<string, number> = {};
-  for (const e of c.edges) {
-    if (e.budget?.tokens !== undefined) {
-      edgeBudgets[BudgetBook.edgeKey(e.from, e.to)] = e.budget.tokens;
-    }
-  }
-  return edgeBudgets;
-}
-
 /**
  * live 改边与 replay 共用的唯一 reducer：先归约拓扑，再按新边集重建边预算表。
  * 分开实现会让 close/open 后的 remaining/fuse 在重启前后漂移。
@@ -129,13 +122,6 @@ export function applyEdgeLifecycleWithBudget(
 ): { concourse: Concourse; budget: BudgetBook } {
   const next = applyEdgeLifecycle(concourse, action, detail);
   return { concourse: next, budget: budget.withEdgeBudgets(edgeBudgetsOf(next)) };
-}
-
-function bookFromConcourse(c: Concourse): BudgetBook {
-  return new BudgetBook({
-    edgeBudgets: edgeBudgetsOf(c),
-    ...(c.budget?.tokens !== undefined ? { globalBudget: c.budget.tokens } : {}),
-  });
 }
 
 /**
@@ -163,7 +149,7 @@ export function replay(events: readonly LedgerEvent[]): ReplayState {
         status: 'draft',
         createdAt: e.at,
         handles: [],
-        budget: bookFromConcourse(concourse),
+        budget: budgetBookFromConcourse(concourse),
       });
       order.push(e.concourseId);
       continue;

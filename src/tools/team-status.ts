@@ -6,6 +6,7 @@ import { defineTool } from '@deepseek-ai/dsh-tools';
 import { ConcourseError } from '../service/concourse.js';
 import { TIER_LABELS } from '../kernel/topology/tier.js';
 import type { Concourse } from '../kernel/topology/schema.js';
+import { directedEdgeCapacity } from '../kernel/topology/edges.js';
 import { assertKnownKeys } from './keys.js';
 import { BOUNDARY_NOTE, type TeamToolsDeps } from './deps.js';
 
@@ -19,7 +20,7 @@ function summaryOf(deps: TeamToolsDeps, id: string, c: Concourse, status: string
     status,
     vertexCount: n,
     openEdges: c.edges.length,
-    totalEdges: n * (n - 1), // 完全有向图对数（开放边上界）
+    totalEdges: directedEdgeCapacity(n),
     delivered: echo.delivered,
     rejected: echo.rejected,
     degraded: echo.degraded,

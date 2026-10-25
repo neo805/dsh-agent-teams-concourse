@@ -43,10 +43,12 @@ export function estimateTaskTokens(task: TaskSpec): number {
  * 顶点 reasoningEffort 乘系数（low×0.6 / high×1.8 / 其他×1），
  * perVertex 为各顶点汇总，total 为总和。
  */
-export function estimateConcourseBudget(c: Concourse): {
+export interface EstimateResult {
   total: number;
   perVertex: Record<string, number>;
-} {
+}
+
+export function estimateConcourseBudget(c: Concourse): EstimateResult {
   const effortByVertex = new Map<string, string | undefined>(
     c.vertices.map((v) => [v.id, v.reasoningEffort]),
   );

@@ -3,17 +3,9 @@
  * 纯预览，不落库（不调 ConcourseService）。
  */
 import { defineTool } from '@deepseek-ai/dsh-tools';
-import { ZodError } from 'zod';
-import { DifficultyProfile, parseConcourse, type Concourse } from '../kernel/topology/schema.js';
-import { validateConcourse } from '../kernel/topology/validate.js';
-import {
-  findUnknownKeyIssues,
-  zodErrorToIssues,
-  type SchemaIssue,
-} from '../kernel/topology/issues.js';
+import { DifficultyProfile, type Concourse } from '../kernel/topology/schema.js';
+import { analyzeConcourse } from '../kernel/topology/analyze.js';
 import { classify, TIER_LABELS } from '../kernel/topology/tier.js';
-import { estimateConcourseBudget } from '../kernel/budget/tokens.js';
-import { normalizeConcourseBudgets } from '../kernel/budget/normalize.js';
 import { suggest } from '../kernel/profile/suggest.js';
 import { assertKnownKeys } from './keys.js';
 import { BOUNDARY_NOTE, ISSUE_SCHEMA, type TeamToolsDeps } from './deps.js';
@@ -152,37 +144,28 @@ export function createTeamTopologyTool(deps: TeamToolsDeps) {
     },
     execute: async (args) => {
       assertKnownKeys(args, ['spec'], 'team_topology');
-      // F2：spec 内部未知键（zod 会 strip）在 parse 前单独扫描，与语义 issue 合并
-      const unknownKeyIssues: SchemaIssue[] = findUnknownKeyIssues(args.spec);
-      let c: Concourse;
-      try {
-        c = parseConcourse(args.spec);
-      } catch (err) {
-        if (err instanceof ZodError) {
-          return {
-            ok: false,
-            stage: 'parse' as const,
-            issues: [...unknownKeyIssues, ...zodErrorToIssues(err)],
-            suggestions: [],
-          };
-        }
-        throw err;
+      // 与 team_plan/service.create 共用唯一分析管线；estimate 只计算一次。
+      const analysis = analyzeConcourse(args.spec);
+      if (analysis.concourse === undefined) {
+        return {
+          ok: false,
+          stage: 'parse' as const,
+          issues: [...analysis.issues],
+          suggestions: [],
+        };
       }
-      // 与 team_plan/service.create 共用同一条预算规范化管线，再执行语义校验。
-      c = normalizeConcourseBudgets(c);
-      const issues = [...unknownKeyIssues, ...validateConcourse(c)];
-      const est = estimateConcourseBudget(c);
+      const c = analysis.concourse;
       const suggestions = await buildSuggestions(deps, c);
       const tier = classify(c.vertices, c.edges);
       return {
-        ok: issues.length === 0,
+        ok: analysis.issues.length === 0,
         stage: 'validate' as const,
-        issues,
+        issues: [...analysis.issues],
         tier,
         tierLabel: TIER_LABELS[tier],
         vertexCount: c.vertices.length,
         edgeCount: c.edges.length,
-        estimatedTokens: Math.ceil(est.total),
+        estimatedTokens: Math.ceil(analysis.estimate?.total ?? 0),
         suggestions,
       };
     },

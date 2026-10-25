@@ -13,6 +13,20 @@
  * 纯函数、零宿主依赖（kernel 层）。
  */
 import { ZodError } from 'zod';
+import { didYouMean } from '../text/similarity.js';
+import {
+  Concourse,
+  ConcourseBudget,
+  DifficultyProfile,
+  Edge,
+  EdgeBudget,
+  Rate,
+  Substrate,
+  TaskSpec,
+  ToolFilter,
+  Vertex,
+  VertexBudget,
+} from './schema.js';
 
 /** 规范化后的结构/语义问题（tools 层 ISSUE_SCHEMA 的 kernel 对应物）。 */
 export interface SchemaIssue {
@@ -21,67 +35,22 @@ export interface SchemaIssue {
   path?: string;
 }
 
-/** 编辑距离（DP，滚动两行数组）——与 tools/keys.ts 同算法，kernel 层自带副本以保单向依赖。 */
-function levenshtein(a: string, b: string): number {
-  const m = a.length;
-  const n = b.length;
-  let prev: number[] = Array.from({ length: n + 1 }, (_, j) => j);
-  for (let i = 1; i <= m; i += 1) {
-    const cur: number[] = [i];
-    for (let j = 1; j <= n; j += 1) {
-      const cost = a[i - 1] === b[j - 1] ? 0 : 1;
-      cur[j] = Math.min((prev[j] ?? 0) + 1, (cur[j - 1] ?? 0) + 1, (prev[j - 1] ?? 0) + cost);
-    }
-    prev = cur;
-  }
-  return prev[n] ?? 0;
+/** 从 zod shape 派生键集：schema 是唯一权威源，新增字段不须手工同步第二份列表。 */
+function shapeKeys(schema: { readonly shape: Record<string, unknown> }): string[] {
+  return Object.keys(schema.shape);
 }
 
-/** 距离阈值内（≤ max(2, ⌊len/2⌋)）的候选，按 (距离, 字典序) 排序。 */
-function didYouMean(input: string, candidates: readonly string[]): string[] {
-  const threshold = Math.max(2, Math.floor(input.length / 2));
-  return candidates
-    .map((c) => ({ c, d: levenshtein(input, c) }))
-    .filter((x) => x.d <= threshold)
-    .sort((x, y) => x.d - y.d || (x.c < y.c ? -1 : x.c > y.c ? 1 : 0))
-    .map((x) => x.c);
-}
-
-/** 各层已知键集（与 schema.ts 保持一致；新增字段必须同步）。 */
-const CONCOURSE_KEYS = ['id', 'tier', 'substrate', 'budget', 'approval', 'vertices', 'edges', 'tasks'] as const;
-const VERTEX_KEYS = [
-  'id',
-  'origin',
-  'parent',
-  'layer',
-  'role',
-  'provider',
-  'model',
-  'reasoningEffort',
-  'lifecycle',
-  'contextMode',
-  'maxDepth',
-  'toolFilter',
-  'budget',
-] as const;
-const EDGE_KEYS = ['from', 'to', 'mode', 'wake', 'hopTTL', 'rate', 'budget'] as const;
-const TASK_KEYS = ['id', 'subject', 'assignee', 'dependencies', 'profile'] as const;
-const PROFILE_KEYS = [
-  'cognitive',
-  'breadth',
-  'contextTokens',
-  'toolCalls',
-  'determinism',
-  'risk',
-  'parallelism',
-  'signals',
-] as const;
-const VERTEX_BUDGET_KEYS = ['tokens', 'wallclockMs'] as const;
-const CONCOURSE_BUDGET_KEYS = ['tokens'] as const;
-const EDGE_BUDGET_KEYS = ['tokens'] as const;
-const TOOL_FILTER_KEYS = ['allow', 'deny'] as const;
-const RATE_KEYS = ['n', 'perMs'] as const;
-const SUBSTRATE_KEYS = ['depthAlwaysOne', 'completeGraph'] as const;
+const CONCOURSE_KEYS = shapeKeys(Concourse);
+const VERTEX_KEYS = shapeKeys(Vertex);
+const EDGE_KEYS = shapeKeys(Edge);
+const TASK_KEYS = shapeKeys(TaskSpec);
+const PROFILE_KEYS = shapeKeys(DifficultyProfile);
+const VERTEX_BUDGET_KEYS = shapeKeys(VertexBudget);
+const CONCOURSE_BUDGET_KEYS = shapeKeys(ConcourseBudget);
+const EDGE_BUDGET_KEYS = shapeKeys(EdgeBudget);
+const TOOL_FILTER_KEYS = shapeKeys(ToolFilter);
+const RATE_KEYS = shapeKeys(Rate);
+const SUBSTRATE_KEYS = shapeKeys(Substrate);
 
 /** 检查一个对象层的未知键，追加 issue（含 did-you-mean）。 */
 function checkObject(

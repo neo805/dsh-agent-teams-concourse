@@ -7,7 +7,6 @@ import { ConcourseError } from '../service/concourse.js';
 import type { Concourse } from '../kernel/topology/schema.js';
 import { TIER_LABELS } from '../kernel/topology/tier.js';
 import { renderTree } from '../kernel/glyphs.js';
-import { estimateConcourseBudget } from '../kernel/budget/tokens.js';
 import { assertKnownKeys } from './keys.js';
 import { BOUNDARY_NOTE, ISSUE_SCHEMA, type TeamToolsDeps, type ToolIssue } from './deps.js';
 
@@ -36,8 +35,7 @@ function risksOf(c: Concourse): string[] {
 }
 
 /** §7.6.3 计划全文：拓扑建议 + 任务表 + 通信边表 + 审批策略 + 预算估算。 */
-function renderPlanText(c: Concourse): string {
-  const est = estimateConcourseBudget(c);
+function renderPlanText(c: Concourse, estimatedTokens: number): string {
   const lines: string[] = [];
   lines.push(`concourse「${c.id}」计划（${TIER_LABELS[c.tier]}）`, '', '拓扑：');
   // Vertex → TreeVertex（exactOptionalPropertyTypes：role 缺席时不带该键）
@@ -61,7 +59,7 @@ function renderPlanText(c: Concourse): string {
   lines.push(
     '',
     `审批策略：${c.approval}（一次计划审批，运行期零审批）`,
-    `预算估算：${Math.ceil(est.total)} tokens（估算口径，非计费）`,
+    `预算估算：${Math.ceil(estimatedTokens)} tokens（估算口径，非计费）`,
   );
   return lines.join('\n');
 }
@@ -113,7 +111,7 @@ export function createTeamPlanTool(deps: TeamToolsDeps) {
           ok: true,
           id: rec.concourse.id,
           status: 'pending-approval',
-          plan: renderPlanText(rec.concourse),
+          plan: renderPlanText(rec.concourse, rec.estimatedTokens),
           risks: risksOf(rec.concourse),
           issues: [],
         };

@@ -9,8 +9,8 @@ import { admit } from '../kernel/comms/gate.js';
 import { checkHop } from '../kernel/comms/hop.js';
 import { DedupStore, dedupKey } from '../kernel/comms/dedup.js';
 import { RateLimiter } from '../kernel/comms/rate.js';
-import { BudgetBook } from '../kernel/comms/budget.js';
-import type { Concourse, Edge, EdgeMode, Wake } from '../kernel/topology/schema.js';
+import { BudgetBook, budgetBookFromConcourse } from '../kernel/comms/budget.js';
+import type { Concourse, EdgeMode, Wake } from '../kernel/topology/schema.js';
 import type { Ledger } from './ledger.js';
 
 /** 单个 concourse 的通信运行时状态（service 持有，随生命周期存活）。 */
@@ -29,18 +29,20 @@ export interface ConcourseRuntime {
 /** 由 concourse 定义构建通信运行时（边预算/全局预算/速率声明接线）。 */
 export function createRuntime(concourse: Concourse, deps: { now?: () => number } = {}): ConcourseRuntime {
   const now = deps.now ?? (() => Date.now());
-  const edgeBudgets: Record<string, number> = {};
   const rate = new Map<string, RateLimiter>();
   for (const e of concourse.edges) {
-    const key = BudgetBook.edgeKey(e.from, e.to);
-    if (e.budget?.tokens !== undefined) edgeBudgets[key] = e.budget.tokens;
-    if (e.rate !== undefined) rate.set(key, new RateLimiter(e.rate, now));
+    if (e.rate !== undefined) {
+      rate.set(BudgetBook.edgeKey(e.from, e.to), new RateLimiter(e.rate, now));
+    }
   }
-  const budget = new BudgetBook({
-    edgeBudgets,
-    ...(concourse.budget?.tokens !== undefined ? { globalBudget: concourse.budget.tokens } : {}),
-  });
-  return { concourse, dedup: new DedupStore(), rate, budget, admissions: new Map(), now };
+  return {
+    concourse,
+    dedup: new DedupStore(),
+    rate,
+    budget: budgetBookFromConcourse(concourse),
+    admissions: new Map(),
+    now,
+  };
 }
 
 /** 入站消息（与发送方解耦：不含任何可信路由元信息）。 */
@@ -72,7 +74,6 @@ export interface AdmissionPlan {
   readonly verdict: 'deliver' | 'degrade' | 'reject';
   readonly reason?: RejectReason;
   readonly candidates?: readonly string[];
-  readonly edge?: Edge;
   readonly mode?: EdgeMode;
   readonly wake?: Wake;
   readonly tokens: number;
@@ -83,7 +84,6 @@ export interface AdmissionPlan {
 
 export interface AdmitDeps {
   readonly ledger?: Ledger;
-  readonly now?: () => number;
 }
 
 /**
@@ -139,7 +139,6 @@ export function evaluateInbound(rt: ConcourseRuntime, msg: InboundMessage): Admi
 
   return {
     verdict: degraded ? 'degrade' : 'deliver',
-    edge,
     mode: edge.mode,
     wake: edge.mode === 'board' ? 'never' : edge.wake,
     tokens,

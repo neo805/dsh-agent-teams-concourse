@@ -35,7 +35,7 @@ describe('analyzeConcourse', () => {
     expect(out.estimate).toBeUndefined();
     expect(out.issues.length).toBeGreaterThan(0);
     expect(out.issues.every((i) => i.code === 'SCHEMA')).toBe(true);
-    expect(out.issues.some((i) => i.path?.includes('vertices[0]'))).toBe(true);
+    expect(out.issues.some((i) => i.path === 'tier' || i.path === 'vertices')).toBe(true);
   });
 
   it('未知字段与语义错误：stage=validate 且合并进同一 issues 列表', () => {
