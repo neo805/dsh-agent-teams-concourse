@@ -19,7 +19,7 @@ const fullSpec: VertexStart = {
 /** 配套的 ctx.agents：子 agent-1 带 scoped restrict。 */
 function withAgents(_fake: FakeSubagents): FakeAgents {
   const agents = new FakeAgents();
-  agents.agents.set('child-1', new FakeAgent());
+  agents.agents.set('child-1', new FakeAgent('child-1'));
   return agents;
 }
 
@@ -93,37 +93,72 @@ describe('host/substrate（VertexStart → startActivation 装配透传，DSH 0.
     expect(fake.disposeCalls).toEqual([{ childId: 'child-1' }]);
   });
 
-  it('sendText 走宿主 sendMessage 语义：sender=startVertex 时的 parent，targetId=childId', async () => {
+  it('deliver 直接写目标 Agent inbox：真实 sender 归因 + wakeup 可控', async () => {
     const fake = new FakeSubagents();
     const agents = withAgents(fake);
     const substrate = createSubstrate({ subagents: fake, agents });
     const handle = await substrate.startVertex(fullSpec, parent);
-    await substrate.sendText(handle, '继续任务');
-    expect(fake.sendCalls).toHaveLength(1);
-    const call = fake.sendCalls[0];
-    expect(call?.sender).toBe(parent);
-    expect(call?.targetId).toBe('child-1');
-    expect(call?.content).toEqual([{ type: 'text', text: '继续任务' }]);
+    substrate.deliver({
+      concourseId: 'c1',
+      admissionId: 'adm-1',
+      target: handle,
+      senderId: 'parent-session-1',
+      content: '继续任务',
+      wakeup: false,
+    });
+    const target = agents.get('child-1');
+    expect(target?.sendCalls).toHaveLength(1);
+    const call = target?.sendCalls[0];
+    expect(call?.target).toBe('next-turn');
+    expect(call?.wakeup).toBe(false);
+    expect((call!.message as { source?: unknown }).source).toMatchObject({
+      kind: 'agent-message',
+      form: 'relay',
+      senderSessionId: 'parent-session-1',
+      concourse: { id: 'c1', admissionId: 'adm-1' },
+    });
   });
 
-  it('sendText 未知顶点（非本 substrate 拉起）→ SEND_FAILED', async () => {
-    const substrate = createSubstrate({ subagents: new FakeSubagents() });
-    const err = await substrate
-      .sendText({ vertexId: 'ghost', childId: 'child-9' }, 'hi')
-      .catch((e: unknown) => e);
-    expect(err).toBeInstanceOf(SubstrateError);
-    expect((err as SubstrateError).code).toBe('SEND_FAILED');
+  it('deliver 目标 Agent 不在线 → TARGET_UNAVAILABLE，不伪造成功', () => {
+    const substrate = createSubstrate({ subagents: new FakeSubagents(), agents: new FakeAgents() });
+    let error: unknown;
+    try {
+      substrate.deliver({
+        concourseId: 'c1',
+        admissionId: 'adm-1',
+        target: { vertexId: 'ghost', childId: 'child-9' },
+        senderId: 'parent-session-1',
+        content: 'hi',
+        wakeup: true,
+      });
+    } catch (e) {
+      error = e;
+    }
+    expect(error).toBeInstanceOf(SubstrateError);
+    expect((error as SubstrateError).code).toBe('TARGET_UNAVAILABLE');
   });
 
-  it('宿主 sendMessage 抛错 → SEND_FAILED 并保留原始 message', async () => {
+  it('目标 Agent.send 抛错 → SEND_FAILED 并保留原始 message', async () => {
     const fake = new FakeSubagents();
-    fake.sendError = new Error('PARENT_UNAVAILABLE');
     const agents = withAgents(fake);
+    agents.get('child-1')!.sendError = new Error('INBOX_CLOSED');
     const substrate = createSubstrate({ subagents: fake, agents });
     const handle = await substrate.startVertex(fullSpec, parent);
-    const err = await substrate.sendText(handle, 'x').catch((e: unknown) => e);
-    expect((err as SubstrateError).code).toBe('SEND_FAILED');
-    expect((err as Error).message).toContain('PARENT_UNAVAILABLE');
+    let error: unknown;
+    try {
+      substrate.deliver({
+        concourseId: 'c1',
+        admissionId: 'adm-1',
+        target: handle,
+        senderId: 'parent-session-1',
+        content: 'x',
+        wakeup: true,
+      });
+    } catch (e) {
+      error = e;
+    }
+    expect((error as SubstrateError).code).toBe('SEND_FAILED');
+    expect((error as Error).message).toContain('INBOX_CLOSED');
   });
 
   it('interrupt 走宿主 interrupt(childId, {kind:ancestor}) 并 dispose 释放激活', async () => {
@@ -177,9 +212,19 @@ describe('host/substrate（VertexStart → startActivation 装配透传，DSH 0.
     expect(substrate.mode).toBe('degraded');
     const e1 = await substrate.startVertex(fullSpec, parent).catch((e: unknown) => e);
     expect((e1 as SubstrateError).code).toBe('DEGRADED');
-    const e2 = await substrate
-      .sendText({ vertexId: 'v-1', childId: 'child-1' }, 'x')
-      .catch((e: unknown) => e);
+    let e2: unknown;
+    try {
+      substrate.deliver({
+        concourseId: 'c',
+        admissionId: 'a',
+        target: { vertexId: 'v-1', childId: 'child-1' },
+        senderId: 'p',
+        content: 'x',
+        wakeup: true,
+      });
+    } catch (e) {
+      e2 = e;
+    }
     expect((e2 as SubstrateError).code).toBe('DEGRADED');
     const e3 = await substrate
       .interrupt({ vertexId: 'v-1', childId: 'child-1' })

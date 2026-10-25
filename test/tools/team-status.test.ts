@@ -4,7 +4,7 @@
 import { describe, expect, test } from 'vitest';
 import { createTeamSendTool } from '../../src/tools/team-send.js';
 import { createTeamStatusTool } from '../../src/tools/team-status.js';
-import { SAMPLE_SPEC, fakeExec, makeFixture, makeRunning } from './helpers.js';
+import { ROOT_AGENT_ID, SAMPLE_SPEC, fakeExec, makeFixture, makeRunning } from './helpers.js';
 
 interface StatusSummary {
   id: string;
@@ -98,7 +98,7 @@ describe('team_status', () => {
     const send = createTeamSendTool(fx.deps);
     const out = (await send.execute(
       { id: 'demo', from: 'lead', to: 'a', content: '这是一条内容足够长的消息确保超过一个 token 的边预算' },
-      fakeExec(),
+      fakeExec({ id: ROOT_AGENT_ID }),
     )) as { ok: boolean; reason?: string };
     expect(out.ok).toBe(false);
     expect(out.reason).toBe('FUSE_EDGE');

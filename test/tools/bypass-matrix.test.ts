@@ -1,60 +1,58 @@
 /**
- * test/tools/bypass-matrix — NFR-9 闸门绕过矩阵（本计划最重要的测试组）。
+ * NFR-9 真实路径矩阵（0.2.1 T0 重写）。
  *
- * 四条路径对同一条闭边消息（a→b，未开放横向边）：
- *   (a) team_send 工具调用 —— 工具包装层；
- *   (b) 直接经 ConcourseService.runtime + admitInbound —— 绕过工具、用服务层句柄；
- *   (c) 伪造「官方 send_message 直发」入站 —— 带 correlationId 伪装官方路由元信息，
- *        判定层不认路由来源，同走 admitInbound 权威判定；
- *   (d) 自行 createRuntime 构造 runtime + admitInbound —— 完全绕过 service/tools 装配。
- * 断言：四条路径全部 reject 且 reason 一致（EDGE_CLOSED），台账各留一条 reject 痕。
+ * 旧矩阵把“直接再调一次 admitInbound”当作旁路证据，实际上没有经过宿主消息
+ * 路径。本矩阵改为：
+ *   (a) team_send 工具（真实 sender Agent）；
+ *   (b) 宿主生成 agent-message 后进入 child pre-step（官方 send_message 同形）；
+ *   (c) 未知发送者伪造来源；
+ * 三条实际路径都必须被拦或从模型输入中移除，并留 reject 痕。
  */
 import { describe, expect, test } from 'vitest';
-import { admitInbound, createRuntime } from '../../src/service/inbox-gate.js';
+import { createUserMessage } from '@deepseek-ai/dsh-llm';
 import { createTeamSendTool } from '../../src/tools/team-send.js';
 import { fakeExec, makeFixture, makeRunning } from './helpers.js';
 
-describe('绕过矩阵：闭边消息四条路径全部拦截且口径一致', () => {
-  test('(a)(b)(c)(d) 全 reject EDGE_CLOSED + 台账 4 条 reject', async () => {
+function officialMessage(senderSessionId: string, content: string) {
+  return createUserMessage({
+    content: [
+      { type: 'text', text: `Agent ${senderSessionId} sent a message: ` },
+      { type: 'text', text: content },
+    ],
+    source: {
+      kind: 'agent-message',
+      form: 'relay',
+      senderSessionId,
+    } as never,
+  });
+}
+
+describe('NFR-9 真实路径矩阵：闭边 a→b 无法进入模型', () => {
+  test('team_send / 官方 pre-step / 伪造 sender 全部拦截，deliver 为 0', async () => {
     const fx = makeFixture();
     await makeRunning(fx);
-    const msg = { from: 'a', to: 'b', content: '闭边消息' };
 
-    // (a) team_send 工具
+    // (a) 工具路径：真实 child-a Agent 调用。
     const tool = createTeamSendTool(fx.deps);
-    const outA = (await tool.execute({ id: 'demo', ...msg }, fakeExec())) as {
-      ok: boolean;
-      outcome: string;
-      reason?: string;
-      candidates?: string[];
-    };
+    const outA = (await tool.execute(
+      { id: 'demo', from: 'a', to: 'b', content: '闭边消息' },
+      fakeExec({ id: 'child-a' }),
+    )) as { ok: boolean; outcome: string; reason?: string; candidates?: string[] };
     expect(outA).toMatchObject({ ok: false, outcome: 'reject', reason: 'EDGE_CLOSED', candidates: ['lead'] });
 
-    // (b) 服务层句柄直调 admitInbound
-    const outB = admitInbound(fx.service.runtime('demo'), msg, { ledger: fx.ledger });
-    expect(outB).toMatchObject({ kind: 'reject', reason: 'EDGE_CLOSED', candidates: ['lead'] });
+    // (b) 官方/裸路径：宿主 agent-message 进入目标 child-b 的模型准入。
+    const official = officialMessage('child-a', '闭边消息-官方路径');
+    expect(fx.service.filterInbound('child-b', [official])).toEqual([]);
 
-    // (c) 伪造官方 send_message 直发入站（带官方路由元信息，判定层不买账）
-    const outC = admitInbound(fx.service.runtime('demo'), { ...msg, correlationId: 'forged-official-call' }, { ledger: fx.ledger });
-    expect(outC).toMatchObject({ kind: 'reject', reason: 'EDGE_CLOSED', candidates: ['lead'] });
+    // (c) 伪造 sender：目标仍是 concourse 顶点，但不属于任何顶点 -> fail-closed。
+    const forged = officialMessage('ghost-agent', '伪造');
+    expect(fx.service.filterInbound('child-b', [forged])).toEqual([]);
 
-    // (d) 自行构造 runtime（未经 service/tools 装配）
-    const fresh = createRuntime(fx.service.get('demo').concourse);
-    const outD = admitInbound(fresh, msg, { ledger: fx.ledger });
-    expect(outD).toMatchObject({ kind: 'reject', reason: 'EDGE_CLOSED', candidates: ['lead'] });
-
-    // 四条路径拒绝 reason 完全一致
-    const reasons = [outA.reason, outB.kind === 'reject' ? outB.reason : null, outC.kind === 'reject' ? outC.reason : null, outD.kind === 'reject' ? outD.reason : null];
-    expect(reasons).toEqual(['EDGE_CLOSED', 'EDGE_CLOSED', 'EDGE_CLOSED', 'EDGE_CLOSED']);
-
-    // 台账：四条路径各留一条 reject 痕，reason 一致
     const rejects = fx.ledger.query({ kind: 'comm', action: 'reject' });
-    expect(rejects).toHaveLength(4);
-    for (const r of rejects) {
-      expect(r.detail['reason']).toBe('EDGE_CLOSED');
-      expect(r.concourseId).toBe('demo');
-    }
-    // 且从未产生 deliver
+    expect(rejects).toHaveLength(3);
+    expect(rejects.slice(0, 2).map((e) => e.detail['reason'])).toEqual(['EDGE_CLOSED', 'EDGE_CLOSED']);
+    expect(rejects[2]?.detail['reason']).toBe('UNKNOWN_VERTEX');
     expect(fx.ledger.query({ kind: 'comm', action: 'deliver' })).toHaveLength(0);
+    expect(fx.substrate.deliveries).toHaveLength(0);
   });
 });

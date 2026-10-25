@@ -5,7 +5,7 @@ import { describe, expect, test } from 'vitest';
 import { admitInbound } from '../../src/service/inbox-gate.js';
 import { createTeamLinkTool } from '../../src/tools/team-link.js';
 import { createTeamSendTool } from '../../src/tools/team-send.js';
-import { fakeExec, makeFixture, makeRunning } from './helpers.js';
+import { ROOT_AGENT_ID, fakeExec, makeFixture, makeRunning } from './helpers.js';
 
 interface LinkOut {
   ok: boolean;
@@ -60,7 +60,10 @@ describe('team_link', () => {
     expect(out.ok).toBe(true);
     expect(out.openEdges).toBe(3);
     const send = createTeamSendTool(fx.deps);
-    const sent = (await send.execute({ id: 'demo', from: 'lead', to: 'a', content: 'hi' }, fakeExec())) as {
+    const sent = (await send.execute(
+      { id: 'demo', from: 'lead', to: 'a', content: 'hi' },
+      fakeExec({ id: ROOT_AGENT_ID }),
+    )) as {
       ok: boolean;
       reason?: string;
     };

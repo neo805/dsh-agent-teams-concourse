@@ -54,6 +54,15 @@ describe('createMemoryStore / createJsonlStore 同构接口', () => {
     while (dirs.length > 0) rmSync(dirs.pop()!, { recursive: true, force: true });
   });
 
+  it('jsonl store：父目录不存在时按需创建（storagePath 是文件路径）', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'concourse-persist-'));
+    dirs.push(dir);
+    const path = join(dir, 'nested', 'deeper', 'events.jsonl');
+    const store = createJsonlStore(path);
+    store.append({ seq: 1, at: 1, concourseId: 'c', kind: 'lifecycle', action: 'create', detail: {} });
+    expect(store.load()).toHaveLength(1);
+  });
+
   it('jsonl store：追加写盘 + load 回放；文件不存在 → 空', () => {
     const dir = mkdtempSync(join(tmpdir(), 'concourse-persist-'));
     dirs.push(dir);

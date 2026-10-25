@@ -16,8 +16,8 @@ describe('OverviewLine（L0）', () => {
     // 顶点数与活跃数（active 2：captain + w-2）
     expect(text).toContain('6 顶点');
     expect(text).toContain('2 活跃');
-    // 开放边 x/y：4 条开放，y = 6*(6-1)/2 = 15（完全图无向口径）
-    expect(text).toContain('开放边 4/15');
+    // 开放边 x/y：4 条开放，y = 6*(6-1) = 30（有向完全图口径）
+    expect(text).toContain('开放边 4/30');
     // 预算条：61% → ▰×6 + ▱×4
     expect(text).toContain('▰▰▰▰▰▰▱▱▱▱');
     expect(text).toContain('61%');

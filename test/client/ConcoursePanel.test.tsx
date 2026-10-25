@@ -14,7 +14,7 @@ describe('ConcoursePanel（面板组装）', () => {
     const text = r.text();
     // L0
     expect(text).toContain('T1b');
-    expect(text).toContain('开放边 4/15');
+    expect(text).toContain('开放边 4/30');
     // L1
     expect(text).toContain('待你决定');
     expect(text).toContain('T-7');

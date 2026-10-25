@@ -70,11 +70,18 @@ export function makeFixture(opts: { withCatalog?: boolean } = {}): ToolsFixture 
   return { deps, service, ledger, substrate };
 }
 
-/** create + submit + approve 直达 running（parent 用普通对象占位，stub 不校验）。 */
-export async function makeRunning(fx: ToolsFixture, spec: unknown = SAMPLE_SPEC): Promise<void> {
+/** 测试用领队 Agent id（SAMPLE_SPEC 中 origin=self 的顶点）。 */
+export const ROOT_AGENT_ID = 'lead-agent';
+
+/** create + submit + approve 直达 running（parent 只暴露 id，stub 不校验宿主）。 */
+export async function makeRunning(
+  fx: ToolsFixture,
+  spec: unknown = SAMPLE_SPEC,
+  parent: unknown = { id: ROOT_AGENT_ID },
+): Promise<void> {
   const rec = fx.service.create(spec);
   fx.service.submit(rec.concourse.id);
-  await fx.service.approve(rec.concourse.id, { id: 'parent-agent' });
+  await fx.service.approve(rec.concourse.id, parent);
 }
 
 /** 最小 ToolRunContext 桩；agent 缺席时该键不出现（对齐 exactOptionalPropertyTypes）。 */

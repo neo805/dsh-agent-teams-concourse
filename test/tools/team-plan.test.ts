@@ -51,6 +51,26 @@ describe('team_plan', () => {
     expect(out.risks.some((r) => r.includes('wake=always'))).toBe(true);
   });
 
+  test('风险分支：board 广播、无预算可估算、空闲顶点', async () => {
+    const fx = makeFixture();
+    const tool = createTeamPlanTool(fx.deps);
+    const spec = {
+      id: 'risk',
+      tier: 'T1a',
+      vertices: [
+        { id: 'lead', origin: 'self', parent: null, layer: 0 },
+        { id: 'idle', parent: 'lead', layer: 1 },
+      ],
+      edges: [{ from: 'lead', to: 'idle', mode: 'board', wake: 'never', hopTTL: 2 }],
+      tasks: [],
+    };
+    const out = (await tool.execute({ spec }, fakeExec())) as PlanOut;
+    expect(out.ok).toBe(true);
+    expect(out.risks.some((r) => r.includes('board'))).toBe(true);
+    expect(out.risks.some((r) => r.includes('无预算'))).toBe(true);
+    expect(out.risks.some((r) => r.includes('无任务'))).toBe(true);
+  });
+
   test('语义非法：ok=false，code=INVALID_SPEC 附 issues', async () => {
     const fx = makeFixture();
     const tool = createTeamPlanTool(fx.deps);

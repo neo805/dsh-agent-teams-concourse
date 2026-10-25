@@ -6,6 +6,7 @@
  * 支持：记录启动顺序、按顶点注入失败、记录 interrupt 回滚。
  */
 import type {
+  DeliveryRequest,
   Substrate,
   SubstrateMode,
   VertexHandle,
@@ -31,8 +32,12 @@ export class StubSubstrate implements Substrate {
   readonly interrupted: string[] = [];
   /** 注入：这些顶点 id 启动时抛 START_FAILED。 */
   readonly failOn = new Set<string>();
+  /** 已接受投递（真实 Agent 写入前的 service 层记录）。 */
+  readonly deliveries: DeliveryRequest[] = [];
+  /** 设置后 deliver 抛错。 */
+  deliverError?: Error;
 
-  startVertex(spec: VertexStart, _parent: unknown): Promise<VertexHandle> {
+  startVertex(spec: VertexStart, _parent: unknown, _signal?: AbortSignal): Promise<VertexHandle> {
     if (this.failOn.has(spec.vertexId)) {
       return Promise.reject(new StubSubstrateError('START_FAILED', `stub 启动失败：${spec.vertexId}`));
     }
@@ -40,8 +45,9 @@ export class StubSubstrate implements Substrate {
     return Promise.resolve({ vertexId: spec.vertexId, childId: `child-${spec.vertexId}` });
   }
 
-  sendText(_handle: VertexHandle, _text: string): Promise<void> {
-    return Promise.resolve();
+  deliver(request: DeliveryRequest): void {
+    if (this.deliverError !== undefined) throw this.deliverError;
+    this.deliveries.push(request);
   }
 
   interrupt(handle: VertexHandle): Promise<void> {

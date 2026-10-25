@@ -4,26 +4,34 @@
  * NFR-1：enabled 缺省/false 时零副作用；NFR-2：单步失败只 warn 不 throw、不拖垮其余步骤。
  */
 import { describe, expect, test } from 'vitest';
+import { createUserMessage } from '@deepseek-ai/dsh-llm';
+import type { ToolDefinition } from '@deepseek-ai/dsh-tools';
 import { apply, inject, name } from '../../src/index.js';
 import { CONCOURSE_PROVIDER_NAME } from '../../src/host/contracts.js';
 import { FakeSubagents } from '../fakes/subagents.js';
+import { SAMPLE_SPEC, fakeExec } from './helpers.js';
+
+type Listener = (payload: unknown, next: () => Promise<unknown>) => Promise<unknown>;
 
 interface FakeCtx {
   subagents: FakeSubagents;
   tools: {
-    registered: unknown[];
+    registered: ToolDefinition[];
     failOn?: string;
-    register(def: { name: string }): () => void;
+    register(def: ToolDefinition): () => void;
   };
   logger: { warns: string[]; warn(m: string): void };
+  listeners: { event: string; listener: Listener }[];
+  on(event: string, listener: Listener): () => void;
 }
 
 function makeCtx(): FakeCtx {
+  const listeners: { event: string; listener: Listener }[] = [];
   return {
     subagents: new FakeSubagents(),
     tools: {
       registered: [],
-      register(def: { name: string }) {
+      register(def: ToolDefinition) {
         if (this.failOn === def.name) throw new Error(`register ${def.name} boom`);
         this.registered.push(def);
         return () => undefined;
@@ -34,6 +42,11 @@ function makeCtx(): FakeCtx {
       warn(m: string) {
         this.warns.push(m);
       },
+    },
+    listeners,
+    on(event, listener) {
+      listeners.push({ event, listener });
+      return () => undefined;
     },
   };
 }
@@ -68,6 +81,7 @@ describe('cordis 入口', () => {
     expect(toolNames).toEqual(
       ['team_assign', 'team_link', 'team_plan', 'team_send', 'team_status', 'team_topology'],
     );
+    expect(ctx.listeners.map((l) => l.event)).toContain('agent/pre-step');
     expect(ctx.logger.warns).toHaveLength(0);
   });
 
@@ -95,18 +109,68 @@ describe('cordis 入口', () => {
     await apply(null, { enabled: true });
   });
 
-  test('回归（真机冒烟实证）：cordis 对未声明 inject 的属性取值抛错 → 装配仍完整', async () => {
-    // cordis context 对未在 inject 声明的属性（如 storageDir）取值直接 throw；
-    // 探测失败必须只降级内存存储，不得拖垮 ledger/service/tools 步骤。
+  test('真实入口接线：agent/pre-step 过滤官方闭边 agent-message', async () => {
     const ctx = makeCtx();
-    const guarded = new Proxy(ctx as object, {
-      get(target, prop, receiver) {
-        if (prop === 'storageDir') throw new Error('cannot get property without inject');
-        return Reflect.get(target, prop, receiver);
-      },
+    await apply(ctx, { enabled: true });
+    const tool = (toolName: string): ToolDefinition => {
+      const found = ctx.tools.registered.find((d) => d.name === toolName);
+      if (found === undefined) throw new Error(`missing tool ${toolName}`);
+      return found;
+    };
+    await tool('team_plan').execute({ spec: SAMPLE_SPEC }, fakeExec());
+    await tool('team_assign').execute({ id: 'demo' }, fakeExec({ id: 'root-agent' }));
+
+    const gate = ctx.listeners.find((l) => l.event === 'agent/pre-step');
+    expect(gate).toBeDefined();
+    const message = createUserMessage({
+      content: [{ type: 'text', text: 'official bypass' }],
+      source: { kind: 'agent-message', form: 'relay', senderSessionId: 'child-1' } as never,
     });
-    await apply(guarded, { enabled: true });
+    const decision = (await gate!.listener(
+      { agent: { id: 'child-2' } },
+      async () => ({ kind: 'enter', messages: [message] }),
+    )) as { kind: string; messages?: unknown[] };
+    expect(decision.kind === 'reject' || (decision.messages?.length ?? 0) === 0).toBe(true);
+
+    // 混合批：用户消息保留，闭边 agent-message 被移除（走 filtered>0 分支）。
+    const userMessage = createUserMessage({
+      content: [{ type: 'text', text: 'human input' }],
+      source: { kind: 'user' } as never,
+    });
+    const mixed = (await gate!.listener(
+      { agent: { id: 'child-2' } },
+      async () => ({ kind: 'enter', messages: [userMessage, message] }),
+    )) as { kind: string; messages?: unknown[] };
+    expect(mixed.kind).toBe('enter');
+    expect(mixed.messages).toEqual([userMessage]);
+
+    // 上游已拒绝 / 无 agent / 空消息：原样返回，不重复判定。
+    const rejected = { kind: 'reject' as const };
+    await expect(gate!.listener({ agent: { id: 'child-2' } }, async () => rejected)).resolves.toBe(rejected);
+    await expect(gate!.listener({}, async () => ({ kind: 'enter', messages: [message] }))).resolves.toMatchObject({
+      kind: 'enter',
+    });
+    await expect(
+      gate!.listener({ agent: { id: 'child-2' } }, async () => ({ kind: 'enter', messages: [] })),
+    ).resolves.toMatchObject({ kind: 'enter' });
+  });
+
+  test('宿主 ctx.on 缺席：跳过 inbound gate 分支，不产生 warn', async () => {
+    const ctx = makeCtx();
+    ctx.on = undefined as never;
+    await apply(ctx, { enabled: true });
+    expect(ctx.tools.registered).toHaveLength(6);
+    expect(ctx.logger.warns).toHaveLength(0);
+  });
+
+  test('NFR-2：agent/pre-step 注册抛错 → 只 warn，provider 与工具仍完整', async () => {
+    const ctx = makeCtx();
+    ctx.on = () => {
+      throw new Error('pre-step registration boom');
+    };
+    await apply(ctx, { enabled: true });
     expect(ctx.subagents.registerCalls).toHaveLength(1);
     expect(ctx.tools.registered).toHaveLength(6);
+    expect(ctx.logger.warns.some((w) => w.includes('inbound-gate'))).toBe(true);
   });
 });

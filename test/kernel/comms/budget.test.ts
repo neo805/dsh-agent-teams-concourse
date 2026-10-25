@@ -83,6 +83,32 @@ describe('全局预算（D2）', () => {
   });
 });
 
+describe('只读预检与运行时重建', () => {
+  it('canConsume 不改变账目；withEdgeBudgets 保留已用边与全局熔断状态', () => {
+    const b = new BudgetBook({ edgeBudgets: { 'a->b': 10, 'a->c': 5 }, globalBudget: 100 });
+    expect(b.canConsume('a', 'b', 11)).toBe('fuse-edge');
+    expect(b.remainingEdge('a', 'b')).toBe(10);
+    b.consumeEdge('a', 'b', 4);
+    b.consumeEdge('a', 'c', 2);
+    const next = b.withEdgeBudgets({ 'a->b': 10, 'b->c': 7 });
+    expect(next.remainingEdge('a', 'b')).toBe(6);
+    expect(next.remainingEdge('b', 'c')).toBe(7);
+    expect(next.remainingEdge('a', 'c')).toBeUndefined();
+    expect(next.remainingGlobal()).toBe(94);
+    expect(next.isGlobalFused()).toBe(false);
+  });
+
+  it('预检覆盖全局熔断/边熔断/全局超额分支', () => {
+    const b = new BudgetBook({ edgeBudgets: { 'a->b': 5 }, globalBudget: 2 });
+    expect(b.canConsume('a', 'b', 3)).toBe('fuse-global');
+    b.consumeEdge('x', 'y', 3);
+    expect(b.canConsume('a', 'b', 1)).toBe('fuse-global');
+    const edge = new BudgetBook({ edgeBudgets: { 'a->b': 1 } });
+    edge.consumeEdge('a', 'b', 2);
+    expect(edge.canConsume('a', 'b', 1)).toBe('fuse-edge');
+  });
+});
+
 describe('非法输入', () => {
   it('tokens 为 0 或负数 → RangeError', () => {
     const b = new BudgetBook({ globalBudget: 100 });

@@ -2,46 +2,58 @@
  * scripts/corpus-regression.mjs 端到端测试。
  * dist 缺失时先 pnpm build（脚本依赖 tsdown 产物），再以 child_process 运行脚本。
  */
-import { execFileSync, execSync, spawnSync } from 'node:child_process';
-import { existsSync, readFileSync } from 'node:fs';
+import { execSync, spawnSync } from 'node:child_process';
+import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 
 const ROOT = join(__dirname, '..', '..');
 const DIST_FILES = ['dist/kernel/profile/profiler.js', 'dist/kernel/profile/suggest.js'];
-const REPORT = join(ROOT, 'docs', 'corpus-regression-P1.md');
+const tempDirs: string[] = [];
+
+function tempDir(): string {
+  const dir = mkdtempSync(join(tmpdir(), 'concourse-corpus-'));
+  tempDirs.push(dir);
+  return dir;
+}
+
+afterEach(() => {
+  while (tempDirs.length > 0) rmSync(tempDirs.pop()!, { recursive: true, force: true });
+});
 
 describe('corpus-regression 脚本', () => {
-  it('退出码 0 且生成含命中率的 Markdown 报告', { timeout: 120_000 }, () => {
+  it('退出码 0 且生成含命中率的临时报告（不修改入库文档）', { timeout: 120_000 }, () => {
     if (!DIST_FILES.every((f) => existsSync(join(ROOT, f)))) {
       execSync('pnpm build', { cwd: ROOT, stdio: 'inherit' });
     }
-    const r = spawnSync('node', ['scripts/corpus-regression.mjs'], { cwd: ROOT, encoding: 'utf8' });
+    const report = join(tempDir(), 'report.md');
+    const r = spawnSync('node', ['scripts/corpus-regression.mjs', '--report', report], {
+      cwd: ROOT,
+      encoding: 'utf8',
+    });
     expect(r.status, `stdout:\n${r.stdout}\nstderr:\n${r.stderr}`).toBe(0);
-    expect(existsSync(REPORT)).toBe(true);
-    const md = readFileSync(REPORT, 'utf8');
-    // 报告含命中率数字与系统性高估/低估小节
+    expect(existsSync(report)).toBe(true);
+    const md = readFileSync(report, 'utf8');
     expect(md).toMatch(/effort exact[^\d]*\d+(\.\d+)?%/i);
     expect(md).toMatch(/±1/);
     expect(md).toMatch(/tier exact[^\d]*\d+(\.\d+)?%/i);
     expect(md).toContain('系统性高估');
   });
 
-  it('dist 缺失时退出码 2 并提示先 build', () => {
-    const probe = join(ROOT, 'dist', 'kernel', 'profile', 'profiler.js');
-    if (!existsSync(probe)) return; // 无 dist 可移，跳过（上一个用例会先 build）
+  it('dist 缺失时退出码 2 并提示先 build（使用空临时 dist，不移动共享产物）', () => {
     const r = spawnSync(
       'node',
-      ['-e', `import('node:fs').then(fs=>{fs.renameSync(${JSON.stringify(probe)},${JSON.stringify(probe + '.bak')});})`],
-      { cwd: ROOT },
+      [
+        'scripts/corpus-regression.mjs',
+        '--dist',
+        join(tempDir(), 'missing-dist'),
+        '--report',
+        join(tempDir(), 'report.md'),
+      ],
+      { cwd: ROOT, encoding: 'utf8' },
     );
-    expect(r.status).toBe(0);
-    try {
-      const run = spawnSync('node', ['scripts/corpus-regression.mjs'], { cwd: ROOT, encoding: 'utf8' });
-      expect(run.status).toBe(2);
-      expect(run.stderr + run.stdout).toContain('pnpm build');
-    } finally {
-      execFileSync('node', ['-e', `require('fs').renameSync(${JSON.stringify(probe + '.bak')},${JSON.stringify(probe)})`]);
-    }
+    expect(r.status).toBe(2);
+    expect(r.stderr + r.stdout).toContain('pnpm build');
   });
 });

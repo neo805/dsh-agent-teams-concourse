@@ -3,7 +3,7 @@
  */
 import { describe, expect, test } from 'vitest';
 import { createTeamSendTool } from '../../src/tools/team-send.js';
-import { SAMPLE_SPEC, fakeExec, makeFixture, makeRunning } from './helpers.js';
+import { ROOT_AGENT_ID, SAMPLE_SPEC, fakeExec, makeFixture, makeRunning } from './helpers.js';
 
 interface SendOut {
   ok: boolean;
@@ -22,28 +22,60 @@ describe('team_send', () => {
     const fx = makeFixture();
     await makeRunning(fx);
     const tool = createTeamSendTool(fx.deps);
-    const out = (await tool.execute({ id: 'demo', from: 'lead', to: 'a', content: '开始任务' }, fakeExec())) as SendOut;
+    const out = (await tool.execute(
+      { id: 'demo', from: 'lead', to: 'a', content: '开始任务' },
+      fakeExec({ id: ROOT_AGENT_ID }),
+    )) as SendOut;
     expect(out).toMatchObject({ ok: true, outcome: 'deliver', mode: 'request-reply', wake: 'on-reply', childId: 'child-a' });
     expect(fx.ledger.query({ kind: 'comm', action: 'deliver' })).toHaveLength(1);
+    expect(fx.substrate.deliveries[0]?.senderId).toBe(ROOT_AGENT_ID);
+    expect(fx.substrate.deliveries[0]?.wakeup).toBe(true);
   });
 
   test('reject：闭边原样返回 EDGE_CLOSED + candidates + 台账留痕（不投递）', async () => {
     const fx = makeFixture();
     await makeRunning(fx);
     const tool = createTeamSendTool(fx.deps);
-    const out = (await tool.execute({ id: 'demo', from: 'a', to: 'b', content: 'hi' }, fakeExec())) as SendOut;
+    const out = (await tool.execute(
+      { id: 'demo', from: 'a', to: 'b', content: 'hi' },
+      fakeExec({ id: 'child-a' }),
+    )) as SendOut;
     expect(out).toMatchObject({ ok: false, outcome: 'reject', reason: 'EDGE_CLOSED', candidates: ['lead'] });
     const rejects = fx.ledger.query({ kind: 'comm', action: 'reject' });
     expect(rejects).toHaveLength(1);
     expect(rejects[0]?.detail['reason']).toBe('EDGE_CLOSED');
   });
 
+  test('可选 correlationId/hops 透传；重复消息返回无 candidates 的 DUPLICATE', async () => {
+    const fx = makeFixture();
+    await makeRunning(fx);
+    const tool = createTeamSendTool(fx.deps);
+    const input = {
+      id: 'demo',
+      from: 'lead',
+      to: 'a',
+      content: '重复候选',
+      correlationId: 'corr-1',
+      hops: 1,
+    };
+    const first = (await tool.execute(input, fakeExec({ id: ROOT_AGENT_ID }))) as SendOut;
+    expect(first.outcome).toBe('deliver');
+    const second = (await tool.execute(input, fakeExec({ id: ROOT_AGENT_ID }))) as SendOut;
+    expect(second).toMatchObject({ outcome: 'reject', reason: 'DUPLICATE' });
+    expect(second.candidates).toBeUndefined();
+  });
+
   test('self 顶点：a→lead 应答不经 substrate，childId=self', async () => {
     const fx = makeFixture();
     await makeRunning(fx);
     const tool = createTeamSendTool(fx.deps);
-    const out = (await tool.execute({ id: 'demo', from: 'a', to: 'lead', content: '汇报完毕' }, fakeExec())) as SendOut;
-    expect(out).toMatchObject({ ok: true, outcome: 'deliver', childId: 'self' });
+    const out = (await tool.execute(
+      { id: 'demo', from: 'a', to: 'lead', content: '汇报完毕' },
+      fakeExec({ id: 'child-a' }),
+    )) as SendOut;
+    expect(out).toMatchObject({ ok: true, outcome: 'deliver', childId: ROOT_AGENT_ID });
+    expect(fx.substrate.deliveries[0]?.target).toEqual({ vertexId: 'lead', childId: ROOT_AGENT_ID });
+    expect(fx.substrate.deliveries[0]?.senderId).toBe('child-a');
   });
 
   test('degrade：窗口内第 n+1 条原样返回 RATE_LIMIT（不投递不拒绝）', async () => {
@@ -56,11 +88,20 @@ describe('team_send', () => {
     };
     await makeRunning(fx, spec);
     const tool = createTeamSendTool(fx.deps);
-    const first = (await tool.execute({ id: 'demo', from: 'lead', to: 'a', content: '第一条' }, fakeExec())) as SendOut;
+    const first = (await tool.execute(
+      { id: 'demo', from: 'lead', to: 'a', content: '第一条' },
+      fakeExec({ id: ROOT_AGENT_ID }),
+    )) as SendOut;
     expect(first.outcome).toBe('deliver');
-    const second = (await tool.execute({ id: 'demo', from: 'lead', to: 'a', content: '第二条' }, fakeExec())) as SendOut;
+    const second = (await tool.execute(
+      { id: 'demo', from: 'lead', to: 'a', content: '第二条' },
+      fakeExec({ id: ROOT_AGENT_ID }),
+    )) as SendOut;
     expect(second).toMatchObject({ ok: true, outcome: 'degrade', reason: 'RATE_LIMIT' });
     expect(fx.ledger.query({ kind: 'comm', action: 'degrade' })).toHaveLength(1);
+    // 降级不是丢弃：两条都真实写入 inbox，第二条不唤醒。
+    expect(fx.substrate.deliveries).toHaveLength(2);
+    expect(fx.substrate.deliveries[1]?.wakeup).toBe(false);
   });
 
   test('目标顶点未拉起（pending-approval）：deliver 判定通过但 NOT_STARTED', async () => {
@@ -68,7 +109,10 @@ describe('team_send', () => {
     fx.service.create(SAMPLE_SPEC);
     fx.service.submit('demo');
     const tool = createTeamSendTool(fx.deps);
-    const out = (await tool.execute({ id: 'demo', from: 'lead', to: 'a', content: 'hi' }, fakeExec())) as SendOut;
+    const out = (await tool.execute(
+      { id: 'demo', from: 'lead', to: 'a', content: 'hi' },
+      fakeExec({ id: ROOT_AGENT_ID }),
+    )) as SendOut;
     expect(out.ok).toBe(false);
     expect(out.outcome).toBe('error');
     expect(out.code).toBe('NOT_STARTED');

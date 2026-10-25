@@ -59,9 +59,13 @@ export class FakeActivation {
   }
 }
 
-/** 伪 Agent：只有 scoped tools.restrict 面（记录收到的 restriction）。 */
+/** 伪 Agent：scoped tools.restrict + inbox send（可验证 wakeup=false）。 */
 export class FakeAgent {
   readonly restrictCalls: unknown[] = [];
+  readonly sendCalls: { message: unknown; target: string; wakeup: boolean }[] = [];
+  sendError?: Error;
+
+  constructor(readonly id: string = 'child-1') {}
   readonly ctx = {
     tools: {
       restrict: (filter: unknown): (() => void) => {
@@ -70,6 +74,11 @@ export class FakeAgent {
       },
     },
   };
+
+  send(message: unknown, target: 'next-turn' | 'next-step', wakeup: boolean): void {
+    if (this.sendError !== undefined) throw this.sendError;
+    this.sendCalls.push({ message, target, wakeup });
+  }
 }
 
 /** 伪 ctx.agents：按 childId 分配 FakeAgent（未知 id 返回 undefined）。 */
