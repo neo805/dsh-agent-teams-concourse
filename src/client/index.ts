@@ -8,8 +8,8 @@
  *
  * 纪律：防御式装配——宿主服务缺席或注册抛错一律吞掉（NFR-2：客户端异常永不阻断宿主）。
  *
- * TODO(P5 数据桥)：面板体暂用空视图占位。宿主侧（src/index.ts）把 ConcourseService
- * 快照登记为 'concourse' 会话投影后，面板体改为从 ctx.sessions 投影读取并转配成
+ * TODO(P7 数据桥)：面板体暂用空视图占位。宿主侧把 ConcourseService 快照登记为
+ * 'concourse' 会话投影后，面板体改为从 ctx.sessions 投影读取并转配成
  * ConcourseView（见 BRIDGE.md「本项目 MVP 口径」）。
  */
 import { createElement } from 'react';
@@ -25,7 +25,7 @@ export const inject = ['sidebarRightTabs', 'slots'];
 export const TAB_DEFINITION_ID = 'dsh-agent-teams-concourse';
 export const TAB_KIND = 'concourse';
 
-/** 空视图占位：数据桥接（P5）前面板体的默认渲染输入。 */
+/** 空视图占位：数据桥接（P7）前面板体的默认渲染输入。 */
 const EMPTY_VIEW: ConcourseView = {
   id: '—',
   tier: '—',
@@ -38,7 +38,7 @@ const EMPTY_VIEW: ConcourseView = {
   fused: false,
 };
 
-/** 面板体：TODO(P5) 从 ctx.sessions 的 'concourse' 会话投影读取真实视图。 */
+/** 面板体：TODO(P7) 从 ctx.sessions 的 'concourse' 会话投影读取真实视图。 */
 export function ConcoursePanelEntry() {
   return createElement(ConcoursePanel, { view: EMPTY_VIEW, pending: [] });
 }

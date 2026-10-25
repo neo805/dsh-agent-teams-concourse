@@ -53,25 +53,37 @@ export interface RequestedVsEffective {
 export interface LedgerOptions {
   readonly now?: () => number;
   readonly sink?: LedgerSink;
+  /** 启动回放：恢复事件、查询投影与 seq（不会重复写 sink）。 */
+  readonly snapshot?: readonly LedgerEvent[];
 }
 
 export class Ledger {
-  private readonly events: LedgerEvent[] = [];
+  private readonly events: LedgerEvent[];
   private readonly now: () => number;
   private readonly sink: LedgerSink | undefined;
-  private seq = 0;
+  private seq: number;
 
   constructor(opts: LedgerOptions = {}) {
     this.now = opts.now ?? (() => Date.now());
     this.sink = opts.sink;
+    this.events = [...structuredClone(opts.snapshot ?? [])];
+    this.seq = this.events.reduce((max, event) => Math.max(max, event.seq), 0);
   }
 
-  /** 追加事件：盖 seq/at 章后入库并回调 sink。 */
+  /**
+   * 追加事件：先写 sink，成功后才发布到内存并推进 seq。
+   * 写盘失败时 Ledger 保持不变，避免“调用报错但内存已提交”。
+   */
   append(input: LedgerEventInput): LedgerEvent {
-    this.seq += 1;
-    const event: LedgerEvent = { ...input, seq: this.seq, at: this.now() };
-    this.events.push(event);
+    const nextSeq = this.seq + 1;
+    const event: LedgerEvent = {
+      ...structuredClone(input),
+      seq: nextSeq,
+      at: this.now(),
+    };
     this.sink?.(event);
+    this.events.push(event);
+    this.seq = nextSeq;
     return event;
   }
 

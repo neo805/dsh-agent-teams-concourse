@@ -2,8 +2,9 @@
  * client/OverviewLine — L0 单行总览（P3：一行说清全局）。
  *
  * 字段：tier · 顶点数 · 活跃数 · 开放边 x/y · 预算条（▰▱ 文字条）· 回声计数 · 熔断标记。
- * 开放边总数口径：完全图无向边数 n*(n-1)/2（与 kernel schema 的 completeGraph 一致）。
+ * 开放边总数口径：有向完全图 n*(n-1)，与 team_status/kernel 共用。
  */
+import { directedEdgeCapacity } from '../kernel/topology/edges.js';
 import type { ConcourseView } from './types.js';
 
 export interface OverviewLineProps {
@@ -24,7 +25,7 @@ function activeCount(view: ConcourseView): number {
 
 export function OverviewLine({ view }: OverviewLineProps) {
   const n = view.vertices.length;
-  const totalEdges = (n * (n - 1)) / 2;
+  const totalEdges = directedEdgeCapacity(n);
   const openEdges = view.edges.filter((e) => e.open).length;
   const pct = view.budget.total > 0 ? Math.round((view.budget.used / view.budget.total) * 100) : 0;
   const tier = view.tierLabel !== undefined ? `${view.tier} ${view.tierLabel}` : view.tier;

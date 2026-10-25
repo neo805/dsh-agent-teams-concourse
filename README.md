@@ -2,7 +2,7 @@
 
 English | [中文](README.zh.md)
 
-**Version:** `0.2.0` (DSH baseline `0.2.1-rc.2`; team layer has passed real-machine smoke on a scratch profile, Desktop acceptance pending) · [Changelog](CHANGELOG.md) · [Requirements](docs/REQUIREMENTS.html) · [Plan](DEVELOPMENT_PLAN.md) · [Collaboration norms](COLLABORATION.md)
+**Version:** `0.2.1-rc.2` (DSH baseline `0.2.1-rc.2`; communication/recovery trust hardening, Desktop acceptance pending) · [Changelog](CHANGELOG.md) · [Requirements](docs/REQUIREMENTS.html) · [Plan](DEVELOPMENT_PLAN.md) · [Collaboration norms](COLLABORATION.md)
 
 The **organizational layer** for DSH: it turns "who may talk to whom, which model and
 reasoning effort each execution unit gets, and how a product finds its way back to the
@@ -25,9 +25,9 @@ one level deep**. Zero art assets: shape carries the semantics, colour only spee
 | Per-vertex assignment: `model` / `reasoningEffort` / `budget` / `toolFilter` / `maxDepth`, fail-loud when out of range | ✅ |
 | Auto-assignment suggestions (heuristic, with `rationale[]` / `signals[]` / `confidence`) | ✅ |
 | Hard communication constraints: deny-by-default open edge set, `wake` defaults to never, hop TTL, idempotent dedup, rate degradation, per-edge and global budget fuses | ✅ |
-| **Inbox-side authoritative gate** + bypass matrix (4 entry points sending over a closed edge: all blocked or logged) | ✅ |
+| **Model-admission authoritative gate** + real-path matrix (tool / `agent-message` / forged sender; closed-edge messages never enter the model) | ✅ |
 | Single plan-approval gate (`team_plan` submits and does not spawn); zero team-building approvals at runtime | ✅ |
-| JSONL ledger (decisions / comms / budget / echo counts) + replay on restart | ✅ |
+| JSONL ledger (decisions / comms / budget / echo counts) + replay on restart (seq and runtime edge changes replay; offline targets fail loud) | ✅ |
 | Right-sidebar panel and plan card: components and tests complete, **but the data bridge is not wired — the panel renders a placeholder today** | ⚠️ |
 | Side-inquiry probe (`team_probe` / `team_peek`, `echo: handle` + `tick` notification) | ⏳ planned (P5) |
 | Four-level discard / shadowing / promotion to member | ⏳ planned (P6) |
@@ -35,9 +35,9 @@ one level deep**. Zero art assets: shape carries the semantics, colour only spee
 
 Real-machine smoke for T1a (star) and T1b (multi-level tree) has been run on a scratch
 profile (during `0.1.0`), and the verbatim closed-edge rejection is on record; `0.2.0` was
-installed into a Web profile and passed its health check. **The 0.2.0 fix batch was not
-re-verified on a real machine** — both API keys were rejected as invalid by the service.
-That is recorded here as it is, not presented as verified.
+installed into a Web profile and passed its health check. `0.2.1-rc.2` trust hardening has
+passed part of a real-machine loop on a minimal scratch Web profile; T3 concurrent
+approval/cancellation and the Desktop restart acceptance are still not presented as verified.
 
 ## Requirements
 
@@ -56,7 +56,7 @@ pnpm verify
 pnpm pack
 
 # 2) install into a profile, then **fully restart** the host (host plugins load at startup only)
-dsh plugin --profile <profile> add <path-to>\dsh-agent-teams-concourse-0.2.0.tgz
+dsh plugin --profile <profile> add <path-to>\dsh-agent-teams-concourse-0.2.1-rc.2.tgz
 ```
 
 Enable it in that profile's `cordis.patch.yml` (lazy by default):
@@ -66,7 +66,7 @@ Enable it in that profile's `cordis.patch.yml` (lazy by default):
     id: concourse
     config:
       enabled: true
-      storagePath: <dir>   # JSONL ledger directory; defaults to host storage, else memory
+      storagePath: <file>  # JSONL ledger file; defaults to in-memory storage
 ```
 
 Then, in a session, in order:
@@ -84,8 +84,8 @@ team_status     one-line overview of topology / budget / communication health
 | Layer | Does | Why here |
 |---|---|---|
 | **kernel** (`src/kernel`) | topology validation, tier classification, difficulty profiling, suggestions, comms gates (gate/hop/dedup/rate/budget), shape glyphs | Pure functions with zero host dependencies, pinned by corpus regression and unit tests (CI-enforced boundary) |
-| **host** (`src/host`) | thin adapter over `startActivation` / `sendText` / `interrupt`, the provider, the model catalog | The only place allowed to touch host seams; degrades instead of crashing when `ctx.subagents` is absent |
-| **service** (`src/service`) | lifecycle, **inbox-side authoritative admission**, ledger, JSONL persistence and replay | The gate belongs at the data write entry, not in each tool shell |
+| **host** (`src/host`) | thin adapter over `startActivation` / `deliver` / `interrupt`, the provider, the model catalog | The only place allowed to touch host seams; degrades instead of crashing when `ctx.subagents` is absent |
+| **service** (`src/service`) | lifecycle, **model-admission authoritative gate**, ledger, JSONL persistence and replay | The gate belongs at the admission boundary, not in each tool shell |
 | **tools / client** | six `team_*` tools (scope-split by identity), React 18 sidebar and plan card | Tools only fail early for UX; the UI is read-only display |
 
 **Route A is deliberate.** A P2 probe falsified the assumption that the official

@@ -1,6 +1,6 @@
 {
   "name": "dsh-agent-teams-concourse",
-  "version": "0.2.0",
+  "version": "0.2.1-rc.2",
   "description": "DeepSeek Harness 组织层插件：把团队拓扑、逐顶点模型定档、通信硬约束变成可编辑的一等数据（虚拟拓扑，复用官方 agent-team 底座）。零美术资产，形状承载语义。",
   "repository": {
     "type": "git",

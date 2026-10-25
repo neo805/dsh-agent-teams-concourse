@@ -11,4 +11,4 @@
       name: dsh-agent-teams-concourse
       # config:
       #   enabled: false          # 总开关：true 才注册工具与服务
-      #   storagePath: <dir>      # 台账目录；缺省探测宿主 storage，再缺席则内存存储
+      #   storagePath: <file>     # JSONL 台账文件；缺省使用内存存储

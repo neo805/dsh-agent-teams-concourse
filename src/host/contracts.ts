@@ -38,7 +38,21 @@ export type SubstrateErrorCode =
   | 'DEGRADED' // 降级模式：ctx.subagents 缺席
   | 'START_FAILED' // startContinuable 抛错（含模型 fail-loud）
   | 'SEND_FAILED'
+  | 'TARGET_UNAVAILABLE'
   | 'INTERRUPT_FAILED';
+
+/** 一次已通过准入、要投递给真实 Agent 的消息。 */
+export interface DeliveryRequest {
+  readonly concourseId: string;
+  readonly admissionId: string;
+  readonly target: VertexHandle;
+  /** 真实发送方的 durable session id（来自 exec.agent）。 */
+  readonly senderId: string;
+  readonly content: string;
+  /** false = 只入收件箱，不唤醒目标 Agent。 */
+  readonly wakeup: boolean;
+  readonly signal?: AbortSignal;
+}
 
 /** 基座能力模式：full = ctx.subagents 可用；degraded = 缺席（不崩溃，NFR）。 */
 export type SubstrateMode = 'full' | 'degraded';
@@ -51,9 +65,9 @@ export type SubstrateMode = 'full' | 'degraded';
 export interface Substrate {
   readonly mode: SubstrateMode;
   /** 拉起一个顶点；degraded 下 throw typed error（code DEGRADED）。 */
-  startVertex(spec: VertexStart, parent: unknown): Promise<VertexHandle>;
-  /** 向已拉起顶点投递纯文本（经 send_message 语义）。 */
-  sendText(handle: VertexHandle, text: string): Promise<void>;
+  startVertex(spec: VertexStart, parent: unknown, signal?: AbortSignal): Promise<VertexHandle>;
+  /** 把已准入消息投递给真实 live Agent；wakeup=false 时不触发新一轮推理。 */
+  deliver(request: DeliveryRequest): void;
   /** 请求中断顶点（尽力而为，不保证静默）。 */
   interrupt(handle: VertexHandle): Promise<void>;
 }

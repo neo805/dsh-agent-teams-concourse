@@ -30,14 +30,24 @@ export class BudgetBook {
     return `${from}->${to}`;
   }
 
+  /** 只读判定：当前是否还能在该边消费 tokens（不改变账目）。 */
+  canConsume(from: string, to: string, tokens: number): 'ok' | 'fuse-edge' | 'fuse-global' {
+    this.assertPositive(tokens);
+    if (this.globalFused) return 'fuse-global';
+    const key = BudgetBook.edgeKey(from, to);
+    if (this.fusedEdges.has(key)) return 'fuse-edge';
+    if (this.globalRemaining !== undefined && tokens > this.globalRemaining) return 'fuse-global';
+    const edgeRem = this.edgeRemaining.get(key);
+    if (edgeRem !== undefined && tokens > edgeRem) return 'fuse-edge';
+    return 'ok';
+  }
+
   /**
    * 尝试在 from→to 边上消费 tokens。
    * @throws RangeError tokens 为非正数（非法输入，计划期就该拦下）
    */
   consumeEdge(from: string, to: string, tokens: number): 'ok' | 'fuse-edge' | 'fuse-global' {
-    if (!Number.isFinite(tokens) || tokens <= 0) {
-      throw new RangeError(`tokens 必须为正数，收到 ${String(tokens)}`);
-    }
+    this.assertPositive(tokens);
     if (this.globalFused) return 'fuse-global';
     const key = BudgetBook.edgeKey(from, to);
     if (this.fusedEdges.has(key)) return 'fuse-edge';
@@ -58,6 +68,26 @@ export class BudgetBook {
     if (edgeRem !== undefined) this.edgeRemaining.set(key, edgeRem - tokens);
     if (this.globalRemaining !== undefined) this.globalRemaining -= tokens;
     return 'ok';
+  }
+
+  /** 复制账本并把边预算表替换为新边集（保留未变边的剩余、全局账与熔断标记）。 */
+  withEdgeBudgets(edgeBudgets: Record<string, number>): BudgetBook {
+    const next = new BudgetBook(
+      this.globalRemaining !== undefined ? { globalBudget: this.globalRemaining } : {},
+    );
+    for (const [key, budget] of Object.entries(edgeBudgets)) {
+      const prior = this.edgeRemaining.get(key);
+      next.edgeRemaining.set(key, prior ?? budget);
+    }
+    for (const key of this.fusedEdges) next.fusedEdges.add(key);
+    next.globalFused = this.globalFused;
+    return next;
+  }
+
+  private assertPositive(tokens: number): void {
+    if (!Number.isFinite(tokens) || tokens <= 0) {
+      throw new RangeError(`tokens 必须为正数，收到 ${String(tokens)}`);
+    }
   }
 
   /** 该边是否已熔断。 */

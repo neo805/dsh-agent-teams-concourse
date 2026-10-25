@@ -11,9 +11,10 @@
  *
  * 依赖全部经构造器注入（substrate/ledger/now/idGen/snapshot），零宿主直接引用（R-1）。
  */
+import { randomUUID } from 'node:crypto';
 import { ZodError } from 'zod';
 import { parseConcourse, type Concourse, type Vertex } from '../kernel/topology/schema.js';
-import { validateConcourse, type ValidationIssue } from '../kernel/topology/validate.js';
+import { validateConcourse } from '../kernel/topology/validate.js';
 import {
   findUnknownKeyIssues,
   zodErrorSummary,
@@ -22,9 +23,18 @@ import {
 } from '../kernel/topology/issues.js';
 import { estimateConcourseBudget } from '../kernel/budget/tokens.js';
 import type { Substrate, VertexHandle, VertexStart } from '../host/contracts.js';
+import type { EdgeMode, Wake } from '../kernel/topology/schema.js';
 import type { Ledger } from './ledger.js';
-import { createRuntime, type ConcourseRuntime } from './inbox-gate.js';
-import type { ConcourseStatus, ReplayState } from './persistence.js';
+import {
+  commitInbound,
+  commitReject,
+  createRuntime,
+  evaluateInbound,
+  type AdmitOutcome,
+  type ConcourseRuntime,
+  type InboundMessage,
+} from './inbox-gate.js';
+import { applyEdgeLifecycle, type ConcourseStatus, type ReplayState } from './persistence.js';
 
 export type { ConcourseStatus } from './persistence.js';
 
@@ -32,6 +42,12 @@ export type ConcourseErrorCode =
   | 'INVALID_SPEC' // parse/validate 未过（issues 附语义校验清单）
   | 'NOT_FOUND'
   | 'ILLEGAL_TRANSITION'
+  | 'APPROVAL_IN_PROGRESS'
+  | 'CANCELLED'
+  | 'IDENTITY_MISMATCH'
+  | 'UNKNOWN_VERTEX'
+  | 'NOT_STARTED'
+  | 'TARGET_UNAVAILABLE'
   | 'APPROVE_FAILED'; // 拉起失败已回滚；causeCode 附基座错误码
 
 export class ConcourseError extends Error {
@@ -54,12 +70,54 @@ export interface ConcourseRecord {
 }
 
 interface Entry {
-  readonly concourse: Concourse;
+  concourse: Concourse;
   status: ConcourseStatus;
   readonly createdAt: number;
   handles: VertexHandle[];
   runtime: ConcourseRuntime;
+  /** origin=self 顶点的 durable 领队 session id。 */
+  rootSessionId?: string;
+  /** 进行中的 approve；存在时禁止第二次 approve 与竞争性转换。 */
+  approval?: Promise<VertexHandle[]>;
 }
+
+export interface SendInput {
+  readonly from: string;
+  readonly to: string;
+  readonly content: string;
+  readonly correlationId?: string;
+  readonly hops?: number;
+}
+
+export interface SendResult {
+  readonly outcome: 'deliver' | 'degrade' | 'reject' | 'error';
+  readonly reason?: string;
+  readonly candidates?: readonly string[];
+  readonly mode?: EdgeMode;
+  readonly wake?: Wake;
+  readonly childId?: string;
+  readonly code?: string;
+  readonly message?: string;
+}
+
+export interface EdgeChangeInput {
+  readonly from: string;
+  readonly to: string;
+  readonly action: 'open' | 'close';
+  readonly mode?: EdgeMode;
+  readonly wake?: Wake;
+  readonly hopTTL?: number;
+}
+
+export interface EdgeChangeResult {
+  readonly concourse: Concourse;
+  readonly openEdges: number;
+}
+
+type MessageLike = {
+  readonly content: readonly { readonly type?: string; readonly text?: string }[];
+  readonly source?: unknown;
+};
 
 export interface ConcourseServiceDeps {
   readonly substrate: Substrate;
@@ -77,13 +135,6 @@ const ALLOWED_FROM: Record<'submit' | 'approve' | 'reject' | 'archive', readonly
   approve: ['pending-approval'],
   reject: ['pending-approval'],
   archive: ['draft', 'pending-approval', 'running'],
-};
-
-const NEXT_STATUS: Record<'submit' | 'approve' | 'reject' | 'archive', ConcourseStatus> = {
-  submit: 'pending-approval',
-  approve: 'running',
-  reject: 'draft',
-  archive: 'archived',
 };
 
 export class ConcourseService {
@@ -107,6 +158,7 @@ export class ConcourseService {
         status: rc.status,
         createdAt: 0,
         handles: [...rc.handles],
+        ...(rc.rootSessionId !== undefined ? { rootSessionId: rc.rootSessionId } : {}),
         runtime: { ...createRuntime(rc.concourse, { now: this.now }), budget: rc.budget },
       });
       this.order.push(rc.concourse.id);
@@ -156,9 +208,17 @@ export class ConcourseService {
       );
     }
     concourse = this.backfillBudget(concourse);
+    this.assertBudgetInvariant(concourse);
     if (this.entries.has(concourse.id)) {
       throw new ConcourseError('INVALID_SPEC', `concourse id「${concourse.id}」已存在`);
     }
+    // 先落盘，再发布内存状态：sink 失败时调用方看到失败且 service 不变。
+    this.ledger.append({
+      concourseId: concourse.id,
+      kind: 'lifecycle',
+      action: 'create',
+      detail: { concourse },
+    });
     const entry: Entry = {
       concourse,
       status: 'draft',
@@ -168,121 +228,328 @@ export class ConcourseService {
     };
     this.entries.set(concourse.id, entry);
     this.order.push(concourse.id);
-    this.ledger.append({
-      concourseId: concourse.id,
-      kind: 'lifecycle',
-      action: 'create',
-      detail: { concourse },
-    });
     return this.recordOf(entry);
   }
 
   /** draft → pending-approval。 */
   submit(id: string): ConcourseRecord {
-    const entry = this.transition(id, 'submit');
+    const entry = this.assertTransitionAllowed(id, 'submit');
     this.ledger.append({ concourseId: id, kind: 'lifecycle', action: 'submit', detail: {} });
+    entry.status = 'pending-approval';
     return this.recordOf(entry);
   }
 
   /**
-   * pending-approval → running：按拓扑序（layer 升序，父先于子）逐顶点拉起。
-   * 任一失败 → 已拉起顶点 interrupt 回滚 + ConcourseError(APPROVE_FAILED)，
-   * 状态停回 pending-approval；台账记录 requested vs effective 与回滚留痕。
+   * pending-approval → running：按拓扑序逐顶点拉起。
+   * 同一 concourse 同时只允许一个 approve；取消/失败均复用完整回滚。
    */
-  async approve(id: string, parent: unknown): Promise<VertexHandle[]> {
-    // 先校验不提交：拉起全部成功后才落 running（失败回滚停回 pending-approval）
+  async approve(
+    id: string,
+    parent: unknown,
+    options: { readonly signal?: AbortSignal } = {},
+  ): Promise<VertexHandle[]> {
     const entry = this.checkTransition(id, 'approve');
-    const ordered = [...entry.concourse.vertices].sort((a, b) => a.layer - b.layer);
-    const started: VertexHandle[] = [];
-    for (const v of ordered) {
-      // origin='self' 顶点即领队会话本身（parent），不再拉起子代理，台账显式留痕
-      if (v.origin === 'self') {
-        this.ledger.append({
-          concourseId: id,
-          kind: 'lifecycle',
-          action: 'vertex-self',
-          detail: { vertexId: v.id },
-        });
-        continue;
-      }
-      const spec = this.vertexStartOf(v, entry.concourse);
-      let handle: VertexHandle;
-      try {
-        handle = await this.substrate.startVertex(spec, parent);
-      } catch (err) {
-        // 回滚：按拉起顺序 interrupt（尽力而为，单点失败不中断回滚）
-        const interrupted: string[] = [];
-        for (const h of started) {
-          try {
-            await this.substrate.interrupt(h);
-            interrupted.push(h.vertexId);
-          } catch {
-            // 尽力而为：中断失败不覆盖主错误
-          }
-        }
-        this.ledger.append({
-          concourseId: id,
-          kind: 'lifecycle',
-          action: 'rollback',
-          detail: { interrupted, failedVertex: v.id },
-        });
-        this.ledger.append({
-          concourseId: id,
-          kind: 'lifecycle',
-          action: 'approve-failed',
-          detail: { failedVertex: v.id },
-        });
-        const causeCode =
-          typeof (err as { code?: unknown }).code === 'string'
-            ? (err as { code: string }).code
-            : 'START_FAILED';
-        throw new ConcourseError(
-          'APPROVE_FAILED',
-          `顶点「${v.id}」拉起失败，已回滚 ${interrupted.length} 个顶点：${(err as Error).message}`,
-          undefined,
-          causeCode,
-        );
-      }
-      started.push(handle);
-      // 台账：请求档位 vs 生效档位（未声明 → effective='inherit'，inherit 可辨）
-      this.ledger.append({
-        concourseId: id,
-        kind: 'lifecycle',
-        action: 'vertex-start',
-        detail: {
-          vertexId: v.id,
-          childId: handle.childId,
-          requested: { model: v.model ?? null, reasoningEffort: v.reasoningEffort ?? null },
-          effective: { model: v.model ?? 'inherit', reasoningEffort: v.reasoningEffort ?? 'inherit' },
-        },
-      });
+    if (entry.approval !== undefined) {
+      throw new ConcourseError('APPROVAL_IN_PROGRESS', `concourse「${id}」已有审批执行在进行中`);
     }
-    entry.handles = started;
-    entry.status = 'running';
+    const controller = new AbortController();
+    const forwardAbort = (): void => controller.abort(options.signal?.reason);
+    if (options.signal?.aborted === true) forwardAbort();
+    options.signal?.addEventListener('abort', forwardAbort, { once: true });
+    const work = this.runApprove(entry, parent, controller.signal);
+    entry.approval = work;
+    try {
+      return await work;
+    } finally {
+      options.signal?.removeEventListener('abort', forwardAbort);
+      if (entry.approval === work) delete entry.approval;
+    }
+  }
+
+  private async runApprove(
+    entry: Entry,
+    parent: unknown,
+    signal: AbortSignal,
+  ): Promise<VertexHandle[]> {
+    const id = entry.concourse.id;
+    const rootSessionId = agentIdOf(parent);
+    // 先落 approve-intent：写盘失败时不拉起任何顶点。
     this.ledger.append({
       concourseId: id,
       kind: 'lifecycle',
-      action: 'approve',
-      detail: { handles: started },
+      action: 'approve-intent',
+      detail: rootSessionId !== undefined ? { rootSessionId } : {},
     });
-    return started;
+    const ordered = [...entry.concourse.vertices].sort((a, b) => a.layer - b.layer);
+    const started: VertexHandle[] = [];
+    try {
+      for (const v of ordered) {
+        signal.throwIfAborted();
+        if (v.origin === 'self') {
+          this.ledger.append({
+            concourseId: id,
+            kind: 'lifecycle',
+            action: 'vertex-self',
+            detail: { vertexId: v.id },
+          });
+          continue;
+        }
+        const spec = this.vertexStartOf(v, entry.concourse);
+        const handle = await this.substrate.startVertex(spec, parent, signal);
+        started.push(handle);
+        this.ledger.append({
+          concourseId: id,
+          kind: 'lifecycle',
+          action: 'vertex-start',
+          detail: {
+            vertexId: v.id,
+            childId: handle.childId,
+            requested: { model: v.model ?? null, reasoningEffort: v.reasoningEffort ?? null },
+            effective: { model: v.model ?? 'inherit', reasoningEffort: v.reasoningEffort ?? 'inherit' },
+          },
+        });
+      }
+      signal.throwIfAborted();
+      this.ledger.append({
+        concourseId: id,
+        kind: 'lifecycle',
+        action: 'approve',
+        detail: { handles: started, ...(rootSessionId !== undefined ? { rootSessionId } : {}) },
+      });
+      entry.handles = started;
+      if (rootSessionId !== undefined) entry.rootSessionId = rootSessionId;
+      entry.status = 'running';
+      return started;
+    } catch (err) {
+      const interrupted: string[] = [];
+      for (const h of started) {
+        try {
+          await this.substrate.interrupt(h);
+          interrupted.push(h.vertexId);
+        } catch {
+          // 尽力而为：中断失败不覆盖主错误
+        }
+      }
+      this.safeAppend({
+        concourseId: id,
+        kind: 'lifecycle',
+        action: 'rollback',
+        detail: { interrupted },
+      });
+      const cancelled = signal.aborted;
+      this.safeAppend({
+        concourseId: id,
+        kind: 'lifecycle',
+        action: cancelled ? 'approve-cancelled' : 'approve-failed',
+        detail: {},
+      });
+      if (cancelled) {
+        throw new ConcourseError('CANCELLED', `concourse「${id}」审批已取消，已回滚 ${interrupted.length} 个顶点`);
+      }
+      const causeCode =
+        typeof (err as { code?: unknown }).code === 'string'
+          ? (err as { code: string }).code
+          : 'START_FAILED';
+      throw new ConcourseError(
+        'APPROVE_FAILED',
+        `顶点拉起失败，已回滚 ${interrupted.length} 个顶点：${errorMessage(err)}`,
+        undefined,
+        causeCode,
+      );
+    }
   }
 
   /** pending-approval → draft。 */
   reject(id: string): ConcourseRecord {
-    const entry = this.transition(id, 'reject');
+    const entry = this.assertTransitionAllowed(id, 'reject');
     this.ledger.append({ concourseId: id, kind: 'lifecycle', action: 'reject', detail: {} });
+    entry.status = 'draft';
     return this.recordOf(entry);
   }
 
   /** → archived；running 时已拉起顶点尽力 interrupt（fire-and-forget）。 */
   archive(id: string): ConcourseRecord {
-    const entry = this.transition(id, 'archive');
+    const entry = this.assertTransitionAllowed(id, 'archive');
+    this.ledger.append({ concourseId: id, kind: 'lifecycle', action: 'archive', detail: {} });
+    entry.status = 'archived';
     for (const h of entry.handles) {
       void Promise.resolve(this.substrate.interrupt(h)).catch(() => undefined);
     }
-    this.ledger.append({ concourseId: id, kind: 'lifecycle', action: 'archive', detail: {} });
     return this.recordOf(entry);
+  }
+
+  /**
+   * 发送一条 team 消息：真实 sender 身份 → 预检 → 写入目标 inbox → 提交扣账。
+   * 投递失败不产生 deliver/预算消费；降级消息以 wakeup=false 投递。
+   */
+  send(id: string, input: SendInput, senderAgent: unknown, signal?: AbortSignal): SendResult {
+    const entry = this.mustGet(id);
+    const senderId = agentIdOf(senderAgent);
+    if (senderId === undefined) {
+      return { outcome: 'error', code: 'IDENTITY_MISMATCH', message: 'team_send 需要真实调用方 Agent 作为身份凭据' };
+    }
+    let fromVertex = this.vertexOfAgent(entry, senderId);
+    // 审批前领队首次派活：上下文里只有它自己的 live Agent，可据此绑定 self 顶点。
+    if (fromVertex === undefined && entry.rootSessionId === undefined && entry.handles.length === 0) {
+      const requested = entry.concourse.vertices.find((v) => v.id === input.from);
+      if (requested?.origin === 'self') {
+        entry.rootSessionId = senderId;
+        fromVertex = requested.id;
+      }
+    }
+    if (fromVertex !== input.from) {
+      return {
+        outcome: 'error',
+        code: 'IDENTITY_MISMATCH',
+        message: `发送方身份与 from 不一致：Agent ${senderId} 对应 ${fromVertex ?? '未知顶点'}，请求为 ${input.from}`,
+      };
+    }
+    const target = entry.concourse.vertices.find((v) => v.id === input.to);
+    if (target === undefined) return { outcome: 'error', code: 'UNKNOWN_VERTEX', message: `顶点「${input.to}」不存在` };
+    const targetId = this.agentIdOfVertex(entry, target.id);
+    if (targetId === undefined) {
+      return { outcome: 'error', code: 'NOT_STARTED', message: `顶点「${target.id}」尚未拉起` };
+    }
+    const handle: VertexHandle = { vertexId: target.id, childId: targetId };
+    const msg: InboundMessage = {
+      from: input.from,
+      to: input.to,
+      content: input.content,
+      ...(input.correlationId !== undefined ? { correlationId: input.correlationId } : {}),
+      ...(input.hops !== undefined ? { hops: input.hops } : {}),
+    };
+    const plan = evaluateInbound(entry.runtime, msg);
+    if (plan.verdict === 'reject') {
+      const out = commitInbound(entry.runtime, msg, plan, this.ledger);
+      return fromOutcome(out);
+    }
+    const admissionId = randomUUID();
+    this.ledger.append({
+      concourseId: id,
+      kind: 'comm',
+      action: 'admit',
+      detail: { from: input.from, to: input.to, tokens: plan.tokens, admissionId },
+    });
+    try {
+      this.substrate.deliver({
+        concourseId: id,
+        admissionId,
+        target: handle,
+        senderId,
+        content: input.content,
+        wakeup: plan.verdict === 'deliver',
+        ...(signal !== undefined ? { signal } : {}),
+      });
+    } catch (err) {
+      this.safeAppend({
+        concourseId: id,
+        kind: 'comm',
+        action: 'delivery-failed',
+        detail: { from: input.from, to: input.to, admissionId, code: errorCode(err), message: errorMessage(err) },
+      });
+      return {
+        outcome: 'error',
+        code: errorCode(err),
+        message: errorMessage(err),
+      };
+    }
+    const out = commitInbound(entry.runtime, msg, plan, this.ledger);
+    if (out.kind === 'deliver' || out.kind === 'degrade') {
+      entry.runtime.admissions.set(admissionId, out.kind);
+    }
+    return { ...fromOutcome(out), childId: targetId };
+  }
+
+  /**
+   * 模型准入闸门：对真实 agent-message 按 durable senderSessionId 判定。
+   * team_send 已提交的 admissionId 只消费票据；官方 send_message 等外部路径
+   * 在此执行同一 open-edge 判定，闭边消息从本轮 messages 中移除并留痕。
+   */
+  filterInbound<T extends MessageLike>(targetAgentId: string, messages: readonly T[]): readonly T[] {
+    // 同一领队可拥有多个 concourse：目标 root id 会重合，必须用唯一 sender
+    // 反查所属 concourse；target 只用于构造候选集。
+    const candidates = [...this.entries.values()].filter(
+      (entry) => this.vertexOfAgent(entry, targetAgentId) !== undefined,
+    );
+    if (candidates.length === 0) return messages;
+    const kept: T[] = [];
+    for (const message of messages) {
+      const source = message.source;
+      if (typeof source !== 'object' || source === null || (source as { kind?: unknown }).kind !== 'agent-message') {
+        kept.push(message);
+        continue;
+      }
+      const senderId = (source as { senderSessionId?: unknown }).senderSessionId;
+      if (typeof senderId !== 'string') continue;
+      const entry = candidates.find((candidate) => this.vertexOfAgent(candidate, senderId) !== undefined);
+      if (entry === undefined) {
+        const fallback = candidates[0]!;
+        const targetVertex = this.vertexOfAgent(fallback, targetAgentId)!;
+        commitReject(fallback.runtime, { from: senderId, to: targetVertex, content: '' }, 'UNKNOWN_VERTEX', undefined, this.ledger);
+        continue;
+      }
+      const from = this.vertexOfAgent(entry, senderId)!;
+      const to = this.vertexOfAgent(entry, targetAgentId)!;
+      const concourseMeta = (source as { concourse?: unknown }).concourse;
+      const admissionId =
+        typeof concourseMeta === 'object' && concourseMeta !== null
+          ? (concourseMeta as { admissionId?: unknown }).admissionId
+          : undefined;
+      if (typeof admissionId === 'string' && entry.runtime.admissions.delete(admissionId)) {
+        kept.push(message);
+        continue;
+      }
+      const content = message.content.map((b) => b.text ?? '').join('');
+      const msg: InboundMessage = { from, to, content };
+      const plan = evaluateInbound(entry.runtime, msg);
+      const out = commitInbound(entry.runtime, msg, plan, this.ledger);
+      if (out.kind !== 'reject') kept.push(message);
+    }
+    return kept;
+  }
+
+  /** 运行期开/闭边：事件先落盘，再由同一 reducer 更新拓扑与预算运行时。 */
+  link(id: string, input: EdgeChangeInput): EdgeChangeResult {
+    const entry = this.mustGet(id);
+    if (entry.status !== 'running') {
+      throw new ConcourseError('ILLEGAL_TRANSITION', `team_link 要求 running 状态，当前为 ${entry.status}`);
+    }
+    const ids = new Set(entry.concourse.vertices.map((v) => v.id));
+    if (!ids.has(input.from) || !ids.has(input.to)) {
+      throw new ConcourseError('UNKNOWN_VERTEX', `顶点不存在：${[input.from, input.to].filter((v) => !ids.has(v)).join(' / ')}`);
+    }
+    const detail =
+      input.action === 'open'
+        ? {
+            from: input.from,
+            to: input.to,
+            mode: input.mode ?? 'notify',
+            wake: input.wake ?? 'never',
+            hopTTL: input.hopTTL ?? 2,
+          }
+        : { from: input.from, to: input.to };
+    this.ledger.append({
+      concourseId: id,
+      kind: 'lifecycle',
+      action: input.action === 'open' ? 'edge-open' : 'edge-close',
+      detail,
+    });
+    const next = applyEdgeLifecycle(entry.concourse, input.action === 'open' ? 'edge-open' : 'edge-close', detail);
+    const runtime = createRuntime(next, { now: this.now });
+    const edgeBudgets: Record<string, number> = {};
+    for (const edge of next.edges) {
+      if (edge.budget?.tokens !== undefined) {
+        edgeBudgets[`${edge.from}->${edge.to}`] = edge.budget.tokens;
+      }
+    }
+    entry.concourse = next;
+    entry.runtime = {
+      ...runtime,
+      dedup: entry.runtime.dedup,
+      admissions: entry.runtime.admissions,
+      budget: entry.runtime.budget.withEdgeBudgets(edgeBudgets),
+    };
+    return { concourse: next, openEdges: next.edges.length };
   }
 
   get(id: string): ConcourseRecord {
@@ -312,10 +579,12 @@ export class ConcourseService {
     return { concourse: entry.concourse, status: entry.status, createdAt: entry.createdAt };
   }
 
-  /** 状态转换闸门：非法转换 throw ILLEGAL_TRANSITION，合法则落新状态。 */
-  private transition(id: string, op: keyof typeof ALLOWED_FROM): Entry {
+  /** 状态转换闸门：非法转换 throw ILLEGAL_TRANSITION；进行中的 approve 阻塞竞争转换。 */
+  private assertTransitionAllowed(id: string, op: keyof typeof ALLOWED_FROM): Entry {
     const entry = this.checkTransition(id, op);
-    entry.status = NEXT_STATUS[op];
+    if (entry.approval !== undefined) {
+      throw new ConcourseError('APPROVAL_IN_PROGRESS', `concourse「${id}」审批执行中，暂不允许 ${op}`);
+    }
     return entry;
   }
 
@@ -329,6 +598,29 @@ export class ConcourseService {
       );
     }
     return entry;
+  }
+
+  /** 事件尽力写入：用于失败/回滚留痕，不覆盖主错误。 */
+  private safeAppend(input: Parameters<Ledger['append']>[0]): void {
+    try {
+      this.ledger.append(input);
+    } catch {
+      // 磁盘失败时主错误已存在；保留原始失败语义。
+    }
+  }
+
+  private agentIdOfVertex(entry: Entry, vertexId: string): string | undefined {
+    const vertex = entry.concourse.vertices.find((v) => v.id === vertexId);
+    if (vertex === undefined) return undefined;
+    if (vertex.origin === 'self') return entry.rootSessionId;
+    return [...entry.handles].reverse().find((h) => h.vertexId === vertexId)?.childId;
+  }
+
+  private vertexOfAgent(entry: Entry, agentId: string): string | undefined {
+    if (entry.rootSessionId === agentId) {
+      return entry.concourse.vertices.find((v) => v.origin === 'self')?.id;
+    }
+    return [...entry.handles].reverse().find((h) => h.childId === agentId)?.vertexId;
   }
 
   /**
@@ -366,6 +658,18 @@ export class ConcourseService {
     return { ...c, vertices, ...(budget !== undefined ? { budget } : {}) };
   }
 
+  /** 回填后复查最终预算不变量，避免保存出“顶点总额度 > 全局预算”的自相矛盾 spec。 */
+  private assertBudgetInvariant(c: Concourse): void {
+    if (c.budget?.tokens === undefined) return;
+    const total = c.vertices.reduce((sum, v) => sum + (v.budget?.tokens ?? 0), 0);
+    if (total <= c.budget.tokens) return;
+    throw new ConcourseError(
+      'INVALID_SPEC',
+      `预算回填后顶点总额度 ${total} 超过 concourse 总预算 ${c.budget.tokens}`,
+      [{ code: 'BUDGET_OVERFLOW', message: `顶点预算合计 ${total} 超过全局预算 ${c.budget.tokens}`, path: 'budget.tokens' }],
+    );
+  }
+
   /** 顶点 → VertexStart（未声明的定档键不写入 = 继承父代理）。 */
   private vertexStartOf(v: Vertex, c: Concourse): VertexStart {
     return {
@@ -392,4 +696,34 @@ export class ConcourseService {
     const subjects = c.tasks.filter((t) => t.assignee === v.id).map((t) => t.subject);
     return subjects.length > 0 ? `任务：${subjects.join('；')}` : `顶点「${v.id}」待命中`;
   }
+}
+
+function agentIdOf(value: unknown): string | undefined {
+  if (typeof value !== 'object' || value === null) return undefined;
+  const id = (value as { id?: unknown }).id;
+  return typeof id === 'string' && id.length > 0 ? id : undefined;
+}
+
+function errorCode(error: unknown): string {
+  return typeof (error as { code?: unknown }).code === 'string'
+    ? (error as { code: string }).code
+    : 'SEND_FAILED';
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+function fromOutcome(outcome: AdmitOutcome): SendResult {
+  if (outcome.kind === 'deliver') {
+    return { outcome: 'deliver', mode: outcome.mode, wake: outcome.wake };
+  }
+  if (outcome.kind === 'degrade') {
+    return { outcome: 'degrade', reason: outcome.reason };
+  }
+  return {
+    outcome: 'reject',
+    reason: outcome.reason,
+    ...(outcome.candidates !== undefined ? { candidates: outcome.candidates } : {}),
+  };
 }

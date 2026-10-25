@@ -6,8 +6,8 @@
 | 需求依据 | `docs/REQUIREMENTS.html` v2.0（唯一需求依据） |
 | 协作规范 | `COLLABORATION.md` v2.0（角色、版本、验证阶梯、交付清单） |
 | 输入 | 两份调研底稿（`docs/*-report.html`）· 13 份 research 底稿 · P0–P4 开发会话与真机测试记录 |
-| 当前版本 | `0.2.0`（0.1.0 = MVP 出口；0.2.0 = 运行时 0.2.1-rc.2 适配 + 真机 6 问题修复） |
-| 基线环境 | DSH `0.2.1-rc.2` · Node `^22.19 || >=24` · pnpm 11.7 · 测试 **44 文件 / 349 测试** |
+| 当前版本 | `0.2.1-rc.2`（0.1.0 = MVP 出口；0.2.0 = 运行时适配 + 真机 6 问题修复；0.2.1-rc.2 = T0–T4 可信性修复，含 Web 多 concourse 归属修复） |
+| 基线环境 | DSH `0.2.1-rc.2` · Node `^22.19 || >=24` · pnpm 11.7 · 测试 **48 文件 / 378 测试** |
 | 目标仓库 | `neo805/dsh-agent-teams-concourse`（Public + MIT，**尚未建仓；建仓与首推须出品人批准**） |
 
 ---
@@ -25,6 +25,7 @@
 | P4 | 最小 UI（L0–L3 面板 + 计划卡） | — | ✅ 完成 | 零资产门禁 + jsdom 断言 |
 | — | **MVP 出口** | `0.1.0` | ✅ 验收通过 | V-1…V-5 有测试或冒烟证据 |
 | — | 运行时适配 + 真机 6 问题修复 | `0.2.0` | ✅ 完成 | 349/349，装 Web 体检 HEALTHY |
+| **H1** | **通信与状态可信性**（T0–T4） | `0.2.1-rc.2` | ✅ 代码/单测完成，Web 实机部分通过 | 真实路径矩阵 + 恢复/原子性断言 |
 | **P5** | **旁路探针 MVP**（隔离 / 摘要 / 句柄 / 回注档） | `0.3.0-rc.1`？ | ⬜ 未开工 | AC-1 / AC-2 / AC-3 |
 | **P6** | **探针生命周期**（七状态 / 四级丢弃 / 遮蔽 / 晋升） | `0.3.x-rc.N` | ⬜ 未开工 | AC-4 / AC-5 |
 | **P7** | **校准闭环 + 运行期能力**（诚实：四项技术债一起还） | `0.4.0-rc.1`？ | ⬜ 未开工 | 校准报告 + 面板读真实投影 + 静默判定 |
@@ -257,7 +258,7 @@ dsh-agent-teams-concourse/
 │   │   └── probe/      ★ P5 新增：echo · handle · truncate · ratio
 │   ├── host/                  宿主稳定面适配（路线 A）
 │   │   ├── contracts.ts       共享类型契约
-│   │   ├── substrate.ts       startActivation / sendText / interrupt（含 degraded 模式）
+│   │   ├── substrate.ts       startActivation / deliver / interrupt（含 degraded 模式）
 │   │   ├── provider.ts        concourse provider（continuable-only，spawn seed）
 │   │   └── catalog.ts         provider/model/effort 枚举 + fail-loud
 │   ├── service/               领域服务
@@ -316,8 +317,8 @@ dsh-agent-teams-concourse/
 
 | 版本 | 内容 | 是否需要批准 |
 | --- | --- | --- |
-| `0.2.0` | 已发布（运行时适配 + 6 问题修复）。**本次文档重构不升版本号** | — |
-| `0.2.1-rc.1` | 备用：若先做一次纯技术债/文档小修，则用此号 | 不需要（第三位） |
+| `0.2.0` | 已发布（运行时适配 + 6 问题修复）。 | — |
+| `0.2.1-rc.2` | T0–T4 通信与状态可信性修复（本轮，含 Web 发现的归属修复） | 不需要（第三位） |
 | `0.3.0-rc.1` | P5 探针 MVP | **需要**（动第二位） |
 | `0.3.x-rc.N` | P6 修正与遮蔽降级 | 不需要 |
 | `0.4.0-rc.1` | P7 + P8 | **需要** |
@@ -333,6 +334,7 @@ dsh-agent-teams-concourse/
 
 | # | 现象 | 影响 | 处置 |
 | --- | --- | --- | --- |
+| 0 | 重启后目标子 Agent 未 live，`team_send` 返回 `TARGET_UNAVAILABLE`（不伪造成功；cold-resume 投递未接线） | 跨重启直接追消息不可用 | 已登记，恢复冷启动留待后续 |
 | 1 | 顶点任务完成后 concourse 仍显示 `running`（无宿主完成事件订阅） | 面板状态滞后 | T-5 / P7 |
 | 2 | 顶点拉起时的 prompt 即首任务，`team_send` 只用于后续追加 | 与"先建队再派活"的直觉不同 | 接受，用户文档明示 |
 | 3 | UI 数据桥未接线，面板以纯 props 占位 | **面板不显示真实状态**（用户可见） | T-3 / P7 最高优先 |

@@ -18,16 +18,19 @@
  *   · delivery='parent'：子代理终态结果投递给父模型（与官方 subagent 工具一致）。
  *
  * 宿主 API 假设：
- *   · sendText  → subagents.sendMessage(sender, targetId, content, { signal })
- *     sender 是 startVertex 时记录的 exact live parent Agent（宿主校验
- *     `ctx.agents.get(sender.id) === sender`），content 为 [{ type:'text', text }]。
+ *   · deliver  → ctx.agents.get(childId).send(message, 'next-turn', wakeup)
+ *     消息来源使用宿主 durable `agent-message` 归因（senderSessionId），并附带
+ *     concourse 准入票据；wakeup=false 实现“投递但不唤醒”。目标 Agent 不在线时
+ *     fail-loud TARGET_UNAVAILABLE，不伪造成功。
  *
  * degraded 模式（deps.subagents 缺席）：构造不崩溃，三方法全部 throw
  * SubstrateError(code='DEGRADED')（NFR 降级不崩溃）。
  */
 
+import { createUserMessage, type MessageSource } from '@deepseek-ai/dsh-llm';
 import {
   CONCOURSE_PROVIDER_NAME,
+  type DeliveryRequest,
   type Substrate,
   type SubstrateErrorCode,
   type VertexHandle,
@@ -68,9 +71,16 @@ export interface ActivationStartSpecLike {
   delivery: 'parent' | 'caller';
 }
 
-/** 宿主 ctx.agents 的结构性子集：按 id 取 live Agent（用于逐顶点工具面收口）。 */
+/** 宿主 live Agent 的最小子集：工具面收口 + 无唤醒投递。 */
+export interface AgentRuntimeLike {
+  readonly id: string;
+  readonly ctx?: { tools?: { restrict?: (filter: unknown) => unknown } };
+  send?(message: unknown, target: 'next-turn' | 'next-step', wakeup: boolean): void;
+}
+
+/** 宿主 ctx.agents 的结构性子集：按 id 取 live Agent。 */
 export interface AgentsLike {
-  get(id: string): unknown;
+  get(id: string): AgentRuntimeLike | undefined;
 }
 
 /** 宿主 ctx.subagents 的结构性子集（本层唯一允许触碰的宿主面）。 */
@@ -119,7 +129,13 @@ export function createSubstrate(deps: SubstrateDeps): Substrate {
     return {
       mode: 'degraded',
       startVertex: <T>(spec: VertexStart, _parent: unknown): Promise<T> => degraded(spec.vertexId, 'startVertex'),
-      sendText: <T>(handle: VertexHandle, _text: string): Promise<T> => degraded(handle.vertexId, 'sendText'),
+      deliver: (request: DeliveryRequest): void => {
+        throw new SubstrateError(
+          'DEGRADED',
+          request.target.vertexId,
+          '基座降级：宿主 ctx.subagents 缺席，deliver 不可用（degraded 模式，不崩溃）。',
+        );
+      },
       interrupt: <T>(handle: VertexHandle): Promise<T> => degraded(handle.vertexId, 'interrupt'),
     };
   }
@@ -149,7 +165,7 @@ export function createSubstrate(deps: SubstrateDeps): Substrate {
     restrict.call(agent.ctx.tools, filter);
   }
 
-  async function startVertex(spec: VertexStart, parent: unknown): Promise<VertexHandle> {
+  async function startVertex(spec: VertexStart, parent: unknown, signal?: AbortSignal): Promise<VertexHandle> {
     // 逐字段条件装配：可选项缺席时对应键不出现
     let agentOptions: { model?: string; reasoningEffort?: string } | undefined;
     if (spec.model !== undefined || spec.reasoningEffort !== undefined) {
@@ -167,7 +183,7 @@ export function createSubstrate(deps: SubstrateDeps): Substrate {
         ...(agentOptions !== undefined ? { agentOptions } : {}),
         ...(spec.maxDepth !== undefined ? { maxDepth: spec.maxDepth } : {}),
       },
-      signal: NEVER_SIGNAL,
+      signal: signal ?? NEVER_SIGNAL,
       delivery: 'parent',
     };
     let activation: ActivationLike;
@@ -211,20 +227,38 @@ export function createSubstrate(deps: SubstrateDeps): Substrate {
     return parent;
   }
 
-  async function sendText(handle: VertexHandle, text: string): Promise<void> {
-    let parent: unknown;
-    try {
-      parent = requireParent('SEND_FAILED', handle, 'sendText');
-    } catch (e) {
-      return Promise.reject(e);
+  /** 把一条已准入消息直接写入目标 live Agent 的 inbox，并显式控制是否唤醒。 */
+  function deliver(request: DeliveryRequest): void {
+    request.signal?.throwIfAborted();
+    const target = agents?.get(request.target.childId);
+    if (target === undefined || typeof target.send !== 'function') {
+      throw new SubstrateError(
+        'TARGET_UNAVAILABLE',
+        request.target.vertexId,
+        `顶点 "${request.target.vertexId}" 的 live Agent 不可达，消息未投递（需恢复或重新拉起）。`,
+      );
     }
+    // agent-message 是宿主的 durable 归因来源；concourse 扩展仅由本插件受理。
+    const source = {
+      kind: 'agent-message',
+      form: 'relay',
+      senderSessionId: request.senderId,
+      concourse: { id: request.concourseId, admissionId: request.admissionId },
+    } as unknown as MessageSource;
+    const message = createUserMessage({
+      content: [
+        { type: 'text', text: `Agent ${request.senderId} sent a message: ` },
+        { type: 'text', text: request.content },
+      ],
+      source,
+    });
     try {
-      await host.sendMessage(parent, handle.childId, [{ type: 'text', text }], { signal: NEVER_SIGNAL });
+      target.send(message, 'next-turn', request.wakeup);
     } catch (e) {
       throw new SubstrateError(
         'SEND_FAILED',
-        handle.vertexId,
-        `向顶点 "${handle.vertexId}" 投递失败：${hostMessage(e)}`,
+        request.target.vertexId,
+        `向顶点 "${request.target.vertexId}" 投递失败：${hostMessage(e)}`,
         e,
       );
     }
@@ -266,5 +300,5 @@ export function createSubstrate(deps: SubstrateDeps): Substrate {
     }
   }
 
-  return { mode: 'full', startVertex, sendText, interrupt };
+  return { mode: 'full', startVertex, deliver, interrupt };
 }

@@ -1,14 +1,13 @@
 /**
  * tools/team-send — 向 concourse 顶点发消息。
  *
- * 权威路径（NFR-9 核心）：先经 admitInbound 第②层判定（闸门/跳数/去重/速率/预算），
- * 判定与留痕全部在 inbox-gate 完成；deliver 才调 substrate.sendText 投递，
- * reject / degrade 原样返回（绝不投递）。
+ * 权威路径（NFR-9 核心）：真实 exec.agent 作为身份凭据，service.send 完成
+ * 闸门/跳数/去重/速率/预算预检后才写入目标 inbox；提交与留痕在投递成功后。
+ * 官方 send_message 等旁路统一在 agent/pre-step 模型准入闸门收口。
  * self 顶点（origin=self）即领队会话自身，不经 substrate（无 childId 概念）。
  */
 import { defineTool } from '@deepseek-ai/dsh-tools';
 import { ConcourseError } from '../service/concourse.js';
-import { admitInbound } from '../service/inbox-gate.js';
 import { assertKnownKeys } from './keys.js';
 import { BOUNDARY_NOTE, type TeamToolsDeps } from './deps.js';
 
@@ -50,7 +49,7 @@ export function createTeamSendTool(deps: TeamToolsDeps) {
           ];
         }
         if (value.outcome === 'degrade') {
-          return [{ type: 'text' as const, text: `已降级（${value.reason ?? '?'}）：投递不唤醒，削峰留痕` }];
+          return [{ type: 'text' as const, text: `已降级（${value.reason ?? '?'}）：消息已进收件箱、不唤醒目标，削峰留痕` }];
         }
         if (value.outcome === 'reject') {
           const cand = (value.candidates ?? []).length > 0 ? `；${value.candidates?.join('、') ?? ''} 可达` : '';
@@ -59,73 +58,52 @@ export function createTeamSendTool(deps: TeamToolsDeps) {
         return [{ type: 'text' as const, text: `发送失败（${value.code ?? '?'}）：${value.message ?? ''}` }];
       },
     },
-    execute: async (args) => {
+    execute: async (args, exec) => {
       assertKnownKeys(args, ['id', 'from', 'to', 'content', 'correlationId', 'hops'], 'team_send');
-      let rt;
       try {
-        rt = deps.service.runtime(args.id);
+        const result = deps.service.send(
+          args.id,
+          {
+            from: args.from,
+            to: args.to,
+            content: args.content,
+            ...(args.correlationId !== undefined ? { correlationId: args.correlationId } : {}),
+            ...(args.hops !== undefined ? { hops: args.hops } : {}),
+          },
+          exec.agent,
+          exec.signal,
+        );
+        if (result.outcome === 'error') {
+          return {
+            ok: false,
+            outcome: 'error' as const,
+            code: result.code ?? 'SEND_FAILED',
+            message: result.message ?? '',
+          };
+        }
+        if (result.outcome === 'reject') {
+          return {
+            ok: false,
+            outcome: 'reject' as const,
+            reason: result.reason ?? 'EDGE_CLOSED',
+            ...(result.candidates !== undefined ? { candidates: [...result.candidates] } : {}),
+            message: `消息被收件箱准入拒绝：${result.reason ?? 'EDGE_CLOSED'}`,
+          };
+        }
+        return {
+          ok: true,
+          outcome: result.outcome,
+          ...(result.reason !== undefined ? { reason: result.reason } : {}),
+          ...(result.mode !== undefined ? { mode: result.mode } : {}),
+          ...(result.wake !== undefined ? { wake: result.wake } : {}),
+          ...(result.childId !== undefined ? { childId: result.childId } : {}),
+        };
       } catch (err) {
         if (err instanceof ConcourseError) {
           return { ok: false, outcome: 'error' as const, code: err.code, message: err.message };
         }
         throw err;
       }
-      // 第②层权威判定（判定与台账留痕在 inbox-gate 内完成）
-      const outcome = admitInbound(
-        rt,
-        {
-          from: args.from,
-          to: args.to,
-          content: args.content,
-          ...(args.correlationId !== undefined ? { correlationId: args.correlationId } : {}),
-          ...(args.hops !== undefined ? { hops: args.hops } : {}),
-        },
-        { ledger: deps.ledger },
-      );
-      if (outcome.kind === 'reject') {
-        return {
-          ok: false,
-          outcome: 'reject' as const,
-          reason: outcome.reason,
-          ...(outcome.candidates !== undefined ? { candidates: [...outcome.candidates] } : {}),
-          message: `消息被收件箱准入拒绝：${outcome.reason}`,
-        };
-      }
-      if (outcome.kind === 'degrade') {
-        return { ok: true, outcome: 'degrade' as const, reason: 'RATE_LIMIT' };
-      }
-      // deliver：self 顶点即领队会话自身，不经 substrate
-      const rec = deps.service.get(args.id);
-      const target = rec.concourse.vertices.find((v) => v.id === args.to);
-      if (target?.origin === 'self') {
-        return { ok: true, outcome: 'deliver' as const, mode: outcome.mode, wake: outcome.wake, childId: 'self' };
-      }
-      // 从台账 vertex-start 事件反查 childId（approve 未拉起则无句柄）
-      const start = [...deps.ledger.query({ concourseId: args.id, kind: 'lifecycle', action: 'vertex-start' })]
-        .reverse()
-        .find((e) => e.detail['vertexId'] === args.to);
-      const childId = start?.detail['childId'];
-      if (typeof childId !== 'string') {
-        return {
-          ok: false,
-          outcome: 'error' as const,
-          code: 'NOT_STARTED',
-          message: `顶点「${args.to}」未拉起（先 team_assign 审批执行）`,
-        };
-      }
-      try {
-        await deps.substrate.sendText({ vertexId: args.to, childId }, args.content);
-      } catch (err) {
-        const code =
-          typeof (err as { code?: unknown }).code === 'string' ? (err as { code: string }).code : 'SEND_FAILED';
-        return {
-          ok: false,
-          outcome: 'error' as const,
-          code,
-          message: err instanceof Error ? err.message : String(err),
-        };
-      }
-      return { ok: true, outcome: 'deliver' as const, mode: outcome.mode, wake: outcome.wake, childId };
     },
   });
 }

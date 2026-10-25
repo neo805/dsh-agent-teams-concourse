@@ -33,6 +33,13 @@ export class RateLimiter {
     return this.stamps.length <= this.limit.n ? 'allow' : 'degrade';
   }
 
+  /** 只读探测：不消耗窗口（投递前决定是否允许唤醒）。 */
+  wouldDegrade(at?: number): boolean {
+    const t = at ?? this.now();
+    const floor = t - this.limit.perMs;
+    return this.stamps.filter((s) => s > floor).length >= this.limit.n;
+  }
+
   /** 清空窗口（人工复位）。 */
   reset(): void {
     this.stamps = [];

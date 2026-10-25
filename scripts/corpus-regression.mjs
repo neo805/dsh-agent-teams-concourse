@@ -17,8 +17,14 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 
-const PROFILER_DIST = join(ROOT, 'dist', 'kernel', 'profile', 'profiler.js');
-const SUGGEST_DIST = join(ROOT, 'dist', 'kernel', 'profile', 'suggest.js');
+function argOf(name, fallback) {
+  const i = argv.indexOf(`--${name}`);
+  return i >= 0 && argv[i + 1] ? resolve(argv[i + 1]) : fallback;
+}
+
+const DIST_ROOT = argOf('dist', join(ROOT, 'dist'));
+const PROFILER_DIST = join(DIST_ROOT, 'kernel', 'profile', 'profiler.js');
+const SUGGEST_DIST = join(DIST_ROOT, 'kernel', 'profile', 'suggest.js');
 
 // dist 前置检测：缺失 → 提示先 build，退出码 2。
 for (const f of [PROFILER_DIST, SUGGEST_DIST]) {
@@ -26,11 +32,6 @@ for (const f of [PROFILER_DIST, SUGGEST_DIST]) {
     console.error(`[corpus-regression] 缺少构建产物 ${f}，请先运行 pnpm build`);
     exit(2);
   }
-}
-
-function argOf(name, fallback) {
-  const i = argv.indexOf(`--${name}`);
-  return i >= 0 && argv[i + 1] ? resolve(argv[i + 1]) : fallback;
 }
 
 const CORPUS = argOf('corpus', join(ROOT, 'test', 'fixtures', 'corpus', 'public.jsonl'));

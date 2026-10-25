@@ -76,7 +76,9 @@ const PROFILE_KEYS = [
   'parallelism',
   'signals',
 ] as const;
-const BUDGET_KEYS = ['tokens', 'wallclockMs'] as const;
+const VERTEX_BUDGET_KEYS = ['tokens', 'wallclockMs'] as const;
+const CONCOURSE_BUDGET_KEYS = ['tokens'] as const;
+const EDGE_BUDGET_KEYS = ['tokens'] as const;
 const TOOL_FILTER_KEYS = ['allow', 'deny'] as const;
 const RATE_KEYS = ['n', 'perMs'] as const;
 const SUBSTRATE_KEYS = ['depthAlwaysOne', 'completeGraph'] as const;
@@ -110,7 +112,7 @@ export function findUnknownKeyIssues(raw: unknown): SchemaIssue[] {
   if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) return issues;
   const c = raw as Record<string, unknown>;
   checkObject(c, CONCOURSE_KEYS, '', issues);
-  checkObject(c['budget'], BUDGET_KEYS, 'budget', issues);
+  checkObject(c['budget'], CONCOURSE_BUDGET_KEYS, 'budget', issues);
   checkObject(c['substrate'], SUBSTRATE_KEYS, 'substrate', issues);
   if (Array.isArray(c['vertices'])) {
     c['vertices'].forEach((v: unknown, i: number) => {
@@ -118,7 +120,7 @@ export function findUnknownKeyIssues(raw: unknown): SchemaIssue[] {
       if (typeof v === 'object' && v !== null) {
         const vo = v as Record<string, unknown>;
         checkObject(vo['toolFilter'], TOOL_FILTER_KEYS, `vertices[${i}].toolFilter`, issues);
-        checkObject(vo['budget'], BUDGET_KEYS, `vertices[${i}].budget`, issues);
+        checkObject(vo['budget'], VERTEX_BUDGET_KEYS, `vertices[${i}].budget`, issues);
       }
     });
   }
@@ -128,7 +130,7 @@ export function findUnknownKeyIssues(raw: unknown): SchemaIssue[] {
       if (typeof e === 'object' && e !== null) {
         const eo = e as Record<string, unknown>;
         checkObject(eo['rate'], RATE_KEYS, `edges[${i}].rate`, issues);
-        checkObject(eo['budget'], BUDGET_KEYS, `edges[${i}].budget`, issues);
+        checkObject(eo['budget'], EDGE_BUDGET_KEYS, `edges[${i}].budget`, issues);
       }
     });
   }

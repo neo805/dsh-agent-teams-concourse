@@ -66,7 +66,7 @@ export function createTeamAssignTool(deps: TeamToolsDeps) {
       assertKnownKeys(args, ['id'], 'team_assign');
       try {
         // exec.agent 即调用方 Agent（宿主注入），作为拉起子代理的 parent
-        const handles = await deps.service.approve(args.id, exec.agent);
+        const handles = await deps.service.approve(args.id, exec.agent, { signal: exec.signal });
         const rec = deps.service.get(args.id);
         const byVertex = new Map(handles.map((h) => [h.vertexId, h.childId]));
         const vertices = rec.concourse.vertices.map((v) => {

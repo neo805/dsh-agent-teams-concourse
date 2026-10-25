@@ -58,6 +58,11 @@ export class DedupStore {
     return this.counts.get(key) ?? 0;
   }
 
+  /** 只读探测：不登记本次出现（用于投递前预检）。 */
+  has(key: string): boolean {
+    return this.counts.has(key);
+  }
+
   /** 已登记的不同 key 数。 */
   get size(): number {
     return this.counts.size;

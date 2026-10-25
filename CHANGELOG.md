@@ -3,6 +3,42 @@
 本项目遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/) 与
 [语义化版本](https://semver.org/lang/zh-CN/)。版本变更须在此登记。
 
+## [0.2.1-rc.2] — 2026-10-25 · 通信与状态可信性
+
+### Added
+
+- `agent/pre-step` 模型准入闸门：以宿主 durable `agent-message.senderSessionId` 映射真实发送方，
+  官方 `send_message` / 裸 `subagents.sendMessage` 的闭边消息在进入模型前被移除并留痕。
+- `team_send` 使用真实 `exec.agent` 身份凭据；身份与 `from` 不一致时 `IDENTITY_MISMATCH`。
+- `DeliveryRequest` / `Substrate.deliver`：直接写目标 Agent inbox，支持 `wakeup=false` 的不唤醒投递；
+  目标不在线时 `TARGET_UNAVAILABLE`，不再伪造成功。
+- `Ledger` 支持事件快照恢复 seq/查询/echo；`replay` 识别 `edge-open` / `edge-close` 与领队 session id。
+
+### Changed
+
+- 通信预检与提交拆为 `evaluateInbound` / `commitInbound`：只有真实投递成功后才扣预算、记 deliver；
+  发送失败写 `delivery-failed`，不消费预算、不污染去重。
+- 速率降级改为真实“投递但不唤醒”：限流消息仍进入收件箱，`wakeup=false`，不再丢弃。
+- `team_link` 收进 `ConcourseService.link`：边事件先落盘，再由同一 reducer 更新拓扑与预算运行时。
+- 生命周期写盘顺序改为“sink 成功才发布内存状态”；`approve` 增加 single-flight、取消透传与完整回滚。
+- 预算回填后复查最终不变量；`storagePath` 明确为 JSONL 文件路径，缺省内存存储。
+- 工具与 UI 的“开放边 x/y”统一为有向完全图 `n(n-1)` 口径。
+
+### Fixed
+
+- 重启后 `Ledger` seq 归零、echo 统计丢失、闭边重开。
+- Web 实机发现：同一领队下多个 concourse 时，模型准入按 target 误选第一条；现以唯一 sender
+  反查所属 concourse，闭边 reject 记到正确实例（rc.2 修复）。
+- `team_send` 发送失败仍记 deliver / 扣预算；`NOT_STARTED` 路径提前消费准入。
+- `concourse` / `edge` 的 `wallclockMs` 被共享未知键集放行后又被 Zod 静默剥离。
+- corpus 回归测试不再改写入库报告或临时移动共享 `dist` 文件。
+
+### Known limits
+
+- 重启后目标子 Agent 未 live 时，发送返回 `TARGET_UNAVAILABLE`；冷恢复投递留待恢复语义阶段。
+- 模型准入闸门阻止消息进入模型，但不会删除已提交的会话 inbox 事件；需求口径已在文档中写明。
+- `team_link` 的 P7 人工确认交互仍未实现，当前只统一领域语义与回放一致性。
+
 ## [Unreleased] — 2026-10-25 · 文档与工作流重构（无代码行为变更）
 
 ### Added

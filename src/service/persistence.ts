@@ -7,9 +7,11 @@
  *    concourse 生命周期状态机 + 顶点句柄 + 预算台账（BudgetBook 确定性重演）。
  *  · 事件源：Ledger 的 sink；service 的全部状态变更都以台账事件落盘。
  */
-import { appendFileSync, existsSync, readFileSync } from 'node:fs';
+import { appendFileSync, existsSync, mkdirSync, readFileSync } from 'node:fs';
+import { dirname } from 'node:path';
 import { BudgetBook } from '../kernel/comms/budget.js';
-import { parseConcourse, type Concourse } from '../kernel/topology/schema.js';
+import { closeEdge, openEdge, withReverseAck } from '../kernel/topology/edges.js';
+import { parseConcourse, type Concourse, type Edge } from '../kernel/topology/schema.js';
 import type { VertexHandle } from '../host/contracts.js';
 import type { LedgerEvent } from './ledger.js';
 
@@ -35,10 +37,11 @@ export function createMemoryStore(): EventStore {
   };
 }
 
-/** JSONL 追加日志存储（node:fs；service 层允许 node:* 用于落盘）。 */
+/** JSONL 追加日志存储；path 是台账文件本身，父目录按需创建。 */
 export function createJsonlStore(path: string): EventStore {
   return {
     append(event) {
+      mkdirSync(dirname(path), { recursive: true });
       appendFileSync(path, `${JSON.stringify(event)}\n`, 'utf8');
     },
     load() {
@@ -57,8 +60,39 @@ export interface ReplayConcourse {
   readonly concourse: Concourse;
   readonly status: ConcourseStatus;
   readonly handles: readonly VertexHandle[];
+  /** 领队/self 顶点的 durable session id；用于重启后的身份映射。 */
+  readonly rootSessionId?: string;
   /** 预算台账（从 create 事件的预算声明初始化，consume 事件确定性重演）。 */
   readonly budget: BudgetBook;
+}
+
+/** 把运行期 edge-open / edge-close 事件归约到拓扑（live 与 replay 共用同一语义）。 */
+export function applyEdgeLifecycle(
+  concourse: Concourse,
+  action: string,
+  detail: Readonly<Record<string, unknown>>,
+): Concourse {
+  if (action === 'edge-open') {
+    const from = String(detail['from'] ?? '');
+    const to = String(detail['to'] ?? '');
+    if (from.length === 0 || to.length === 0) return concourse;
+    const edge = {
+      from,
+      to,
+      mode: detail['mode'] === 'request-reply' || detail['mode'] === 'board' ? detail['mode'] : 'notify',
+      wake: detail['wake'] === 'always' || detail['wake'] === 'on-reply' ? detail['wake'] : 'never',
+      hopTTL: typeof detail['hopTTL'] === 'number' ? detail['hopTTL'] : 2,
+    } as Edge;
+    let edges = concourse.edges;
+    for (const item of withReverseAck(edge)) edges = openEdge(edges, item);
+    return { ...concourse, edges };
+  }
+  if (action === 'edge-close') {
+    const from = String(detail['from'] ?? '');
+    const to = String(detail['to'] ?? '');
+    return { ...concourse, edges: closeEdge(concourse.edges, from, to) };
+  }
+  return concourse;
 }
 
 /** replay 输出：可直接注入 ConcourseService 构造器（snapshot）恢复运行。 */
@@ -87,6 +121,7 @@ export function replay(events: readonly LedgerEvent[]): ReplayState {
     concourse: Concourse;
     status: ConcourseStatus;
     handles: VertexHandle[];
+    rootSessionId?: string;
     budget: BudgetBook;
   }
   const byId = new Map<string, Mutable>();
@@ -111,6 +146,9 @@ export function replay(events: readonly LedgerEvent[]): ReplayState {
       else if (e.action === 'approve') {
         cur.status = 'running';
         cur.handles = [...(e.detail['handles'] as VertexHandle[] | undefined ?? [])];
+        if (typeof e.detail['rootSessionId'] === 'string') cur.rootSessionId = e.detail['rootSessionId'];
+      } else if (e.action === 'edge-open' || e.action === 'edge-close') {
+        cur.concourse = applyEdgeLifecycle(cur.concourse, e.action, e.detail);
       } else if (e.action === 'reject') cur.status = 'draft';
       else if (e.action === 'archive') cur.status = 'archived';
     } else if (e.kind === 'budget' && e.action === 'consume') {
@@ -130,6 +168,7 @@ export function replay(events: readonly LedgerEvent[]): ReplayState {
         concourse: cur.concourse,
         status: cur.status,
         handles: cur.handles,
+        ...(cur.rootSessionId !== undefined ? { rootSessionId: cur.rootSessionId } : {}),
         budget: cur.budget,
       };
     }),

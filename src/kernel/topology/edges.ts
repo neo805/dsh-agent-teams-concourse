@@ -6,6 +6,11 @@
  */
 import type { Edge, Vertex } from './schema.js';
 
+/** 有向完全图的边容量 n(n-1)；UI 与工具的“开放边 x/y”统一使用本口径。 */
+export function directedEdgeCapacity(vertexCount: number): number {
+  return Math.max(0, vertexCount) * Math.max(0, vertexCount - 1);
+}
+
 /** n(n-1) 个有序对，按输入顺序稳定枚举（先行后列）。 */
 export function completeGraphPairs(ids: string[]): Array<{ from: string; to: string }> {
   const pairs: Array<{ from: string; to: string }> = [];

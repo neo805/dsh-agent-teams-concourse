@@ -2,7 +2,7 @@
 
 [English](README.md) | 中文
 
-**版本：** `0.2.0`（DSH 基线 `0.2.1-rc.2`；团队层已过 scratch profile 真机冒烟，Desktop 实机验收待办）· [变更日志](CHANGELOG.md) · [需求文档](docs/REQUIREMENTS.html) · [开发计划](DEVELOPMENT_PLAN.md) · [协作规范](COLLABORATION.md)
+**版本：** `0.2.1-rc.2`（DSH 基线 `0.2.1-rc.2`；通信/恢复可信性修复批次，Desktop 实机验收待办）· [变更日志](CHANGELOG.md) · [需求文档](docs/REQUIREMENTS.html) · [开发计划](DEVELOPMENT_PLAN.md) · [协作规范](COLLABORATION.md)
 
 DSH 的**组织层**插件：把「谁和谁能通信、每个执行单元用什么模型与思考强度、产出如何回到主线」
 变成可编辑的一等数据。拓扑不是搭出来的，是**剪**出来的——底座在物理上已是完全图，本插件在其上
@@ -20,17 +20,17 @@ DSH 的**组织层**插件：把「谁和谁能通信、每个执行单元用什
 | 逐顶点定档：`model` / `reasoningEffort` / `budget` / `toolFilter` / `maxDepth`，越界 fail-loud | ✅ |
 | 自动定档建议（启发式，输出 `rationale[]` / `signals[]` / `confidence`） | ✅ |
 | 通信硬约束：开放边集 deny-by-default、`wake` 默认 never、跳数 TTL、幂等去重、速率降级、边/全局预算熔断 | ✅ |
-| **收件侧权威拦截** + 绕过矩阵（4 条入口发闭边消息，全部被拦或留痕） | ✅ |
+| **模型准入侧权威拦截** + 真实路径矩阵（工具 / `agent-message` / 伪造 sender，闭边消息不进入模型） | ✅ |
 | 计划审批闸门（`team_plan` 只提交不拉起），运行期零组队审批 | ✅ |
-| JSONL 台账（决策 / 通信 / 预算 / 回声计数）+ 重启回放恢复 | ✅ |
+| JSONL 台账（决策 / 通信 / 预算 / 回声计数）+ 重启回放恢复（seq 与运行期改边可回放；离线目标 fail-loud） | ✅ |
 | 右侧栏面板与计划卡：组件与测试齐全，**但数据桥未接线——面板今天是占位视图** | ⚠️ |
 | 旁路探针（`team_probe` / `team_peek`，`echo: handle` + `tick` 通知） | ⏳ 计划中（P5） |
 | 四级丢弃 / 遮蔽 / 晋升为成员 | ⏳ 计划中（P6） |
 | 会话加入与 T2a 多领队并列（`team_join`） | ⏳ 计划中（P8） |
 
 已在 scratch profile 上做过 T1a（星形）与 T1b（多层树）的真机冒烟（`0.1.0` 期间），闭边拦截原文在案；
-`0.2.0` 已装入 Web profile 并通过体检。**但 0.2.0 修复批次的真机复测没跑成**——两个 API key
-被服务端判为 invalid，如实记录在此，不当作已验证。
+`0.2.0` 已装入 Web profile 并通过体检。`0.2.1-rc.2` 的可信性修复已在最小 scratch Web
+profile 完成部分实机闭环；未跑通的 T3 并发/取消与 Desktop 重启验收仍不作为已验证。
 
 ## 前置条件
 
@@ -47,7 +47,7 @@ pnpm verify
 pnpm pack
 
 # 2) 装进某个 profile，然后**完全重启**宿主（宿主插件只在启动时加载）
-dsh plugin --profile <profile> add <path-to>\dsh-agent-teams-concourse-0.2.0.tgz
+dsh plugin --profile <profile> add <path-to>\dsh-agent-teams-concourse-0.2.1-rc.2.tgz
 ```
 
 在该 profile 的 `cordis.patch.yml` 里打开它（缺省惰性）：
@@ -57,7 +57,7 @@ dsh plugin --profile <profile> add <path-to>\dsh-agent-teams-concourse-0.2.0.tgz
     id: concourse
     config:
       enabled: true
-      storagePath: <dir>   # JSONL 台账目录；缺省探测宿主 storage，再缺席则内存存储
+      storagePath: <file>  # JSONL 台账文件；缺省使用内存存储
 ```
 
 然后在会话里按顺序使用：
@@ -75,8 +75,8 @@ team_status     拓扑 / 预算 / 通信健康度一行总览
 | 层 | 干什么 | 为什么在这一层 |
 |---|---|---|
 | **kernel**（`src/kernel`） | 拓扑校验、tier 判定、难度画像、建议、通信闸门（gate/hop/dedup/rate/budget）、形状符号表 | 纯函数、零宿主依赖，可被语料回归与单测钉死（CI 硬门禁） |
-| **host**（`src/host`） | `startActivation` / `sendText` / `interrupt` 的薄适配 + provider + 模型目录 | 唯一允许触碰宿主 seam 的地方，缺 `ctx.subagents` 时降级不崩溃 |
-| **service**（`src/service`） | 生命周期、**收件箱准入权威判定**、台账、JSONL 持久化与回放 | 闸门的权威落点在这里，而不是各个工具入口 |
+| **host**（`src/host`） | `startActivation` / `deliver` / `interrupt` 的薄适配 + provider + 模型目录 | 唯一允许触碰宿主 seam 的地方，缺 `ctx.subagents` 时降级不崩溃 |
+| **service**（`src/service`） | 生命周期、**模型准入权威判定**、台账、JSONL 持久化与回放 | 闸门的权威落点在这里，而不是各个工具入口 |
 | **tools / client** | 6 个 `team_*` 工具（按身份作用域分流）、React 18 右侧栏与计划卡 | 工具只做"早失败"以改善体验；UI 只做只读显示 |
 
 **路线 A 是刻意的**：P2 探针证伪了「官方 `spawnTeammate` 会透传 `agentOptions`」这条链路，
