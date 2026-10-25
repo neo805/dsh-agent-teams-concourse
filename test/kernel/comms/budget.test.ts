@@ -5,7 +5,12 @@
  * tokens 为非正数 → RangeError（非法输入）。
  */
 import { describe, expect, it } from 'vitest';
-import { BudgetBook } from '../../../src/kernel/comms/budget.js';
+import {
+  BudgetBook,
+  budgetBookFromConcourse,
+  edgeBudgetsOf,
+} from '../../../src/kernel/comms/budget.js';
+import { parseConcourse } from '../../../src/kernel/topology/schema.js';
 
 const key = (from: string, to: string): string => BudgetBook.edgeKey(from, to);
 
@@ -134,6 +139,26 @@ describe('只读预检与运行时重建', () => {
     const edge = new BudgetBook({ edgeBudgets: { [key('a', 'b')]: 1 } });
     edge.consumeEdge('a', 'b', 2);
     expect(edge.canConsume('a', 'b', 1)).toBe('fuse-edge');
+  });
+});
+
+describe('从 concourse 构造预算账本（live/replay 单一入口）', () => {
+  it('统一提取边预算与全局预算，初始 remaining 一致', () => {
+    const c = parseConcourse({
+      id: 'c-budget',
+      tier: 'T1a',
+      budget: { tokens: 100 },
+      vertices: [
+        { id: 'a', origin: 'self' },
+        { id: 'b', parent: 'a', layer: 1 },
+      ],
+      edges: [{ from: 'a', to: 'b', budget: { tokens: 40 } }],
+    });
+    expect(edgeBudgetsOf(c)).toEqual({ [key('a', 'b')]: 40 });
+    const book = budgetBookFromConcourse(c);
+    expect(book.remainingEdge('a', 'b')).toBe(40);
+    expect(book.remainingGlobal()).toBe(100);
+    expect(book.isFusedEdge('a', 'b')).toBe(false);
   });
 });
 
