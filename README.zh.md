@@ -2,7 +2,7 @@
 
 [English](README.md) | 中文
 
-**版本：** `0.2.1-rc.5`（DSH 基线 `0.2.1-rc.2`；通信正确性、provider 路由、UI 身份映射与构建门禁加固，rc.4 Web 核心链路保留，rc.5 实机验收待办）· [变更日志](CHANGELOG.md) · [需求文档](docs/REQUIREMENTS.html) · [开发计划](DEVELOPMENT_PLAN.md) · [协作规范](COLLABORATION.md)
+**版本：** `0.2.1-rc.5`（DSH 基线 `0.2.1-rc.2`；通信正确性、provider 路由、UI 身份映射与构建门禁加固，rc.4 Web 核心链路保留，rc.5 已经出品人验收）· [变更日志](CHANGELOG.md) · [需求文档](docs/REQUIREMENTS.html) · [开发计划](DEVELOPMENT_PLAN.md) · [协作规范](COLLABORATION.md)
 
 DSH 的**组织层**插件：把「谁和谁能通信、每个执行单元用什么模型与思考强度、产出如何回到主线」
 变成可编辑的一等数据。拓扑不是搭出来的，是**剪**出来的——底座在物理上已是完全图，本插件在其上
@@ -34,7 +34,7 @@ DSH 的**组织层**插件：把「谁和谁能通信、每个执行单元用什
 链路已在最小 `conc03` scratch profile 验证：plan → assign → deliver → 闭边拒绝 →
 重开边；重启回放状态一致；非法 model 预检零拉起。`0.2.1-rc.5` 修复去重碰撞、
 熔断边恢复、`hopTTL` 校验、provider 路由、工具组回滚与 UI 身份映射，并加固边界/
-发布/测试门禁。rc.5 的实机验收仍待完成，不作为已验证。
+发布/测试门禁。rc.5 已由出品人验收；本表述不扩大既有记录所覆盖的验证范围。
 
 ## 前置条件
 

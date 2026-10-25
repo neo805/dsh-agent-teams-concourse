@@ -2,7 +2,7 @@
 
 English | [中文](README.zh.md)
 
-**Version:** `0.2.1-rc.5` (DSH baseline `0.2.1-rc.2`; communication correctness, provider routing, UI identity mapping and build-gate hardening; Web core loop from rc.4 retained, rc.5 real-machine acceptance pending) · [Changelog](CHANGELOG.md) · [Requirements](docs/REQUIREMENTS.html) · [Plan](DEVELOPMENT_PLAN.md) · [Collaboration norms](COLLABORATION.md)
+**Version:** `0.2.1-rc.5` (DSH baseline `0.2.1-rc.2`; communication correctness, provider routing, UI identity mapping and build-gate hardening; Web core loop from rc.4 retained, rc.5 accepted by the producer) · [Changelog](CHANGELOG.md) · [Requirements](docs/REQUIREMENTS.html) · [Plan](DEVELOPMENT_PLAN.md) · [Collaboration norms](COLLABORATION.md)
 
 The **organizational layer** for DSH: it turns "who may talk to whom, which model and
 reasoning effort each execution unit gets, and how a product finds its way back to the
@@ -42,8 +42,8 @@ rc.3 communication/replay hardening. Its core Web loop was verified on a scratch
 profile: plan → assign → deliver → edge close/reject → reopen, plus restart replay with
 identical state and invalid-model preflight with zero starts. `0.2.1-rc.5` fixes
 collision-safe dedup, edge-fuse recovery, `hopTTL` validation, provider routing, tool-group
-rollback and UI identity mapping, and hardens the boundary/package/test gates. Its rc.5
-real-machine acceptance remains pending and is not presented as verified.
+rollback and UI identity mapping, and hardens the boundary/package/test gates. The producer
+has accepted rc.5; this statement does not expand the verified scope beyond the recorded checks.
 
 ## Requirements
 
