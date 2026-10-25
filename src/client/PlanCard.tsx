@@ -4,6 +4,7 @@
  * 五段齐全：拓扑建议（含依据）· 任务表（含依据列与总预算）· 通信边表（含关闭边计数）·
  * 审批策略 · 风险（无风险显式写「无」）。头部操作：批准并运行 / 改 / 弃。
  */
+import { directedPairKey } from '../kernel/keys.js';
 import type { PlanEdgeRow, PlanView, TierOption } from './types.js';
 
 export interface PlanCardProps {
@@ -113,7 +114,7 @@ export function PlanCard({ plan, onApprove, onRevise, onDiscard }: PlanCardProps
           </thead>
           <tbody>
             {plan.edges.map((e) => (
-              <tr key={`${e.from}->${e.to}`}>
+              <tr key={directedPairKey(e.from, e.to)}>
                 <td>{e.from}</td>
                 <td>{e.to}</td>
                 <td>{e.kind}</td>

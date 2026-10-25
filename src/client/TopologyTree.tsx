@@ -7,7 +7,7 @@
  * 折叠语义：collapsedIds 中的顶点自身仍渲染（附折叠声明），其全部后代隐藏；
  * 隐藏顶点的可见后代（不存在于此模型——折叠即整支隐藏）父指针重映射到最近可见祖先。
  */
-import { renderTree, type Status, type TreeVertex } from '../kernel/glyphs.js';
+import { renderTreeRows, type Status, type TreeVertex } from '../kernel/glyphs.js';
 import type { VertexView } from './types.js';
 
 export interface TopologyTreeProps {
@@ -87,19 +87,16 @@ export function TopologyTree({ vertices, collapsedIds = [] }: TopologyTreeProps)
       ...(v.role !== undefined ? { role: v.role } : {}),
     };
   });
-  const status: Record<string, Status> = {};
+  // 任意顶点 id 都允许；null-prototype 防止 __proto__ 等键写入原型链。
+  const status: Record<string, Status> = Object.create(null) as Record<string, Status>;
   for (const v of visible) status[v.id] = v.status;
 
-  const lines = renderTree(remapped, { status });
+  const rows = renderTreeRows(remapped, { status });
   const counts = descendantCounts(vertices, collapsed);
-  // 折叠声明：附在折叠顶点所在行末尾（行内含 `形状 id` 片段）
-  const annotated = lines.map((line) => {
-    for (const [id, count] of counts) {
-      if (line.includes(` ${id}`)) {
-        return `${line}（▸ ${count} 个顶点已折叠）`;
-      }
-    }
-    return line;
+  // 折叠声明按结构化行的 id 关联；不再从行文本反查，避免 a/a-1 之类的子串误伤。
+  const annotated = rows.map(({ id, line }) => {
+    const count = counts.get(id);
+    return count === undefined ? line : `${line}（▸ ${count} 个顶点已折叠）`;
   });
 
   return (

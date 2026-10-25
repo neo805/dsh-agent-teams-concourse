@@ -28,12 +28,22 @@ export interface TreeVertex {
   role?: string;
 }
 
+export interface TreeRow {
+  readonly id: string;
+  readonly line: string;
+}
+
 /**
- * L2 文字树。DFS，兄弟按输入数组声明序。
+ * L2 文字树（结构化行）。DFS，兄弟按输入数组声明序。
  * 行格式：根 `{形状} {id}`；子行 `{前缀}{├─|└─}{形状} {id}{ role ? '  '+role : ''}`。
  * 缩进规则：└ 分支的子行前缀补空格，├ 分支的子行前缀补 │。
+ *
+ * 返回 id 与行文本的显式关联；调用方不得再从行文本反查顶点（任意 id/role 都可碰撞）。
  */
-export function renderTree(vertices: TreeVertex[], opts?: { status?: Record<string, Status> }): string[] {
+export function renderTreeRows(
+  vertices: TreeVertex[],
+  opts?: { status?: Record<string, Status> },
+): TreeRow[] {
   const status = opts?.status ?? {};
   const glyphOf = (id: string): string => {
     // id/status 都由用户 spec 驱动，必须只读自有属性，不能命中原型链。
@@ -55,20 +65,24 @@ export function renderTree(vertices: TreeVertex[], opts?: { status?: Record<stri
     }
   }
 
-  const lines: string[] = [];
+  const rows: TreeRow[] = [];
   const walk = (v: TreeVertex, prefix: string, isRoot: boolean, isLast: boolean): void => {
     const role = v.role !== undefined ? `  ${v.role}` : '';
-    if (isRoot) {
-      lines.push(`${glyphOf(v.id)} ${v.id}${role}`);
-    } else {
-      lines.push(`${prefix}${isLast ? '└─' : '├─'}${glyphOf(v.id)} ${v.id}${role}`);
-    }
+    const line = isRoot
+      ? `${glyphOf(v.id)} ${v.id}${role}`
+      : `${prefix}${isLast ? '└─' : '├─'}${glyphOf(v.id)} ${v.id}${role}`;
+    rows.push({ id: v.id, line });
     const kids = children.get(v.id) ?? [];
     const childPrefix = isRoot ? prefix : prefix + (isLast ? '   ' : '│  ');
     kids.forEach((k, i) => walk(k, childPrefix, false, i === kids.length - 1));
   };
   roots.forEach((r) => walk(r, '', true, true));
-  return lines;
+  return rows;
+}
+
+/** 兼容纯文本调用：只取结构化行的行文本。 */
+export function renderTree(vertices: TreeVertex[], opts?: { status?: Record<string, Status> }): string[] {
+  return renderTreeRows(vertices, opts).map((row) => row.line);
 }
 
 /** 预算文字条：10 格 ▰▱，百分比先 clamp 再四舍五入（展示百分比保留原值）。 */
