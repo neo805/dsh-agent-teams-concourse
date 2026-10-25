@@ -57,7 +57,7 @@
     "check:boundaries": "node scripts/check-boundaries.mjs",
     "verify:assets": "node scripts/check-no-assets.mjs",
     "pack:smoke": "node scripts/pack-smoke.mjs",
-    "verify": "pnpm build && pnpm typecheck && pnpm lint && pnpm check:boundaries && pnpm verify:assets && pnpm test:coverage && pnpm pack:smoke"
+    "verify": "pnpm typecheck && pnpm lint && pnpm check:boundaries && pnpm test:coverage && pnpm verify:assets && pnpm pack:smoke"
   },
   "dependencies": {
     "zod": "^4.4.3"
@@ -95,8 +95,8 @@
     "@deepseek-ai/dsh-subagent": "0.2.1-rc.2",
     "@deepseek-ai/dsh-tools": "0.2.1-rc.2",
     "@types/node": "^22.19.0",
-    "@types/react": "^19.0.0",
-    "@types/react-dom": "^19.0.0",
+    "@types/react": "^18.3.0",
+    "@types/react-dom": "^18.3.0",
     "@vitest/coverage-v8": "^3.2.0",
     "jsdom": "^29.1.1",
     "oxlint": "0.18.1",
