@@ -1,7 +1,8 @@
 /**
  * kernel/comms/dedup 测试 —— 幂等去重（§7.5.C3）。
- * dedupKey = hash(from|to|correlationId|digest)，correlationId 缺省用空串占位；
- * 重复消息丢弃并累计计数。哈希用纯 JS（FNV-1a），禁 node:crypto。
+ * dedupKey = 完整 (from,to,correlationId,content) 的 JSON tuple；
+ * correlationId 缺省用空串占位；重复消息丢弃并累计计数。
+ * contentDigest 仅是诊断工具，永不作为消息身份。
  */
 import { describe, expect, it } from 'vitest';
 import { DedupStore, contentDigest, dedupKey } from '../../../src/kernel/comms/dedup.js';
@@ -54,6 +55,23 @@ describe('dedupKey', () => {
       dedupKey({ ...base, content: 'y' }),
     ]);
     expect(keys.size).toBe(5);
+  });
+
+  it('小字母表穷举：所有不同 tuple 必须得到不同 key（单射不变量）', () => {
+    const values = ['', 'a', 'b', 'a\u001f', '\u001f', '中', 'x y', 'costarring'];
+    const keys = new Set<string>();
+    let tuples = 0;
+    for (const from of values) {
+      for (const to of values) {
+        for (const correlationId of values) {
+          for (const content of values) {
+            keys.add(dedupKey({ from, to, correlationId, content }));
+            tuples += 1;
+          }
+        }
+      }
+    }
+    expect(keys.size).toBe(tuples);
   });
 });
 

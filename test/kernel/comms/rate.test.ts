@@ -63,3 +63,80 @@ describe('RateLimiter（B2 速率降级）', () => {
     expect(rl.check()).toBe('degrade'); // 窗口未滑出
   });
 });
+
+/**
+ * 旧实现作为行为参考：有界化后仍必须逐操作给出相同 verdict。
+ * 只用于测试对拍，生产代码不得保留第二份实现。
+ */
+class ReferenceRateLimiter {
+  private stamps: number[] = [];
+  constructor(
+    private readonly limit: { n: number; perMs: number },
+  ) {}
+
+  check(at: number): 'allow' | 'degrade' {
+    const floor = at - this.limit.perMs;
+    this.stamps = this.stamps.filter((s) => s > floor);
+    this.stamps.push(at);
+    return this.stamps.length <= this.limit.n ? 'allow' : 'degrade';
+  }
+
+  wouldDegrade(at: number): boolean {
+    const floor = at - this.limit.perMs;
+    return this.stamps.filter((s) => s > floor).length >= this.limit.n;
+  }
+
+  reset(): void {
+    this.stamps = [];
+  }
+}
+
+describe('RateLimiter 参考对拍与有界性', () => {
+  it('任意乱序/重复/负时刻序列的 verdict 与旧实现一致', () => {
+    const sequences = [
+      [0, 0, 1, 500, 400, -100, 1000, 1001, 5000, 0, 3000],
+      [0, 999, 1000, 1001, 2000, 1999, 0, 500],
+      [-5000, 0, 250, 250, 251, 100000, 99999],
+    ];
+    for (const n of [1, 2, 3, 5]) {
+      for (const perMs of [1, 10, 1000]) {
+        for (const ats of sequences) {
+          const actual = new RateLimiter({ n, perMs }, () => 0);
+          const reference = new ReferenceRateLimiter({ n, perMs });
+          for (const at of ats) {
+            expect(actual.wouldDegrade(at), `wouldDegrade n=${n} perMs=${perMs} at=${at}`).toBe(
+              reference.wouldDegrade(at),
+            );
+            expect(actual.check(at), `check n=${n} perMs=${perMs} at=${at}`).toBe(
+              reference.check(at),
+            );
+            expect(actual.wouldDegrade(at), `post-check n=${n} perMs=${perMs} at=${at}`).toBe(
+              reference.wouldDegrade(at),
+            );
+          }
+          actual.reset();
+          reference.reset();
+          expect(actual.wouldDegrade(ats[0] ?? 0)).toBe(reference.wouldDegrade(ats[0] ?? 0));
+        }
+      }
+    }
+  });
+
+  it('wouldDegrade 只读：探测不消耗窗口', () => {
+    const rl = new RateLimiter({ n: 2, perMs: 1000 }, () => 0);
+    expect(rl.wouldDegrade(0)).toBe(false);
+    expect(rl.wouldDegrade(0)).toBe(false);
+    expect(rl.check(0)).toBe('allow');
+    expect(rl.check(0)).toBe('allow');
+    expect(rl.wouldDegrade(0)).toBe(true);
+    expect(rl.check(0)).toBe('degrade');
+  });
+
+  it('连续降级一万次后内部窗口仍受 n 约束，不保留全历史', () => {
+    const n = 3;
+    const rl = new RateLimiter({ n, perMs: 1_000_000 }, () => 0);
+    for (let i = 0; i < 10_000; i += 1) rl.check(i);
+    const internal = rl as unknown as { stamps: number[] };
+    expect(internal.stamps.length).toBeLessThanOrEqual(n);
+  });
+});
