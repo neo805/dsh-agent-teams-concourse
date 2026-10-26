@@ -3,6 +3,30 @@
 本项目遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/) 与
 [语义化版本](https://semver.org/lang/zh-CN/)。版本变更须在此登记。
 
+## [0.2.1-rc.7] — 2026-10-27 · 通信语义断点修复
+
+### Added
+
+- `AdmissionPlan.consumeGlobal` 与 `budget.consume` 的 `consumeGlobal` 明细：全局预算只覆盖主动唤醒投递；旧事件缺该字段时仍按旧口径计入全局账。
+- H3 ADR 增加 rc.7 勘误：边预算覆盖所有真实投递，concourse 全局预算定义为主动唤醒预算。
+- 已知残留新增 TTL/correlation 链元数据缺口，明确 H3.1 前不得宣称硬 TTL 或完整 request-reply 绑定。
+
+### Changed
+
+- `wake` 不再只是返回值/台账标签：宿主 `wakeup` 由 `deliver` 与 `plan.wake` 共同决定，`never`（含 board 归一）与 degrade 永远不唤醒。
+- 测试基线更新为 **60 文件 / 468 测试**。
+
+### Fixed
+
+- 实际投递忽略 `plan.wake`，导致 `never`/board 仍触发目标新推理（FR-C4 / FR-C6）。
+- 全局熔断误拒 `wake=never`/board；现在只暂停 `wake≠never`，边熔断仍独立生效，并保持 live/replay 等价（FR-C10）。
+- `team_link` 运行期可新开自环并绕过计划期 `SELF_LOOP` 校验；现在写台账前拒绝 `from===to`。
+
+### Known limits
+
+- `hops` 仍由调用方自报且不随 `DeliveryRequest`/`source` 传播，`correlationId` 亦未形成端到端绑定；FR-C7/FR-C2 在 H3.1 前不构成硬保证。
+- 既有 H3.1 崩溃恢复、Catalog 并发、AgentDirectory、UI 数据桥等残留不变。
+
 ## [0.2.1-rc.6] — 2026-10-25 · 硬化出口与 H3.0 协议
 
 ### Added

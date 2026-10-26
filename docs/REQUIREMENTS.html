@@ -441,12 +441,12 @@ footer{margin-top:50px;padding-top:18px;border-top:1px solid var(--line);color:v
   <table class="t">
     <tr><th class="c">ID</th><th>需求</th><th>判据 / 说明</th><th class="c">状态</th></tr>
     <tr><td class="c mono">FR-C1</td><td><strong>开放边集裁剪</strong>：投递前校验 <code>(from,to) ∈ E</code>；违反即<strong>工具调用失败</strong>，附可达候选</td><td>deny-by-default；拒绝必留痕</td><td class="c"><span class="b ok">已实现</span></td></tr>
-    <tr><td class="c mono">FR-C2</td><td><strong>半双工</strong>：A→B 存在不蕴含 B→A；request-reply 声明两条边并绑定 correlationId</td><td>反向应答边自动生成、wake 默认 never</td><td class="c"><span class="b ok">已实现</span></td></tr>
+    <tr><td class="c mono">FR-C2</td><td><strong>半双工</strong>：A→B 存在不蕴含 B→A；request-reply 声明两条边并绑定 correlationId</td><td>反向应答边自动生成、wake 默认 never</td><td class="c"><span class="b warn">部分</span><span class="ev">（反向边在；correlation 尚未端到端绑定，留 H3.1）</span></td></tr>
     <tr><td class="c mono">FR-C3</td><td><strong>跨边界闸门</strong>：跨越团队边界的边需显式声明 + 计划期一次审批</td><td>借鉴 team-rooms 的教训：闸门必须在数据写入口，不能只在工具外壳</td><td class="c"><span class="b bad">未实现</span><span class="ev">（单团队模型下暂无跨边界概念）</span></td></tr>
     <tr><td class="c mono">FR-C4</td><td><strong>wake: never 为默认（最高优先级）</strong>：消息进邮箱不触发对方新一轮推理，对方在下一个自然步点读取</td><td>把事件驱动降级为轮询驱动，从根上消灭互相唤醒</td><td class="c"><span class="b ok">已实现</span></td></tr>
     <tr><td class="c mono">FR-C5</td><td><strong>速率降级</strong>：窗口内超额即<strong>降级为「投递不唤醒」</strong>并留痕（削峰不丢消息）</td><td><code>RateLimiter</code> → <code>degrade</code>；台账记 <code>action:'degrade'</code></td><td class="c"><span class="b ok">已实现</span></td></tr>
     <tr><td class="c mono">FR-C6</td><td><strong>广播只入共享板，不唤醒任何顶点</strong>：要唤醒必须逐个显式定向</td><td><code>mode:'board'</code> 时 deliver 的 wake 恒为 never</td><td class="c"><span class="b ok">已实现</span></td></tr>
-    <tr><td class="c mono">FR-C7</td><td><strong>跳数 TTL</strong>：消息携带 hops / ttl；<code>hops &gt; ttl</code> 只记录不投递并标记 <code>HOP_LIMIT</code></td><td>终止类约束的第一道</td><td class="c"><span class="b ok">已实现</span></td></tr>
+    <tr><td class="c mono">FR-C7</td><td><strong>跳数 TTL</strong>：消息携带 hops / ttl；<code>hops &gt; ttl</code> 只记录不投递并标记 <code>HOP_LIMIT</code></td><td>终止类约束的第一道</td><td class="c"><span class="b warn">部分</span><span class="ev">（hops 仅调用方自报且不传播；H3.1 前非硬保证）</span></td></tr>
     <tr><td class="c mono">FR-C8</td><td><strong>静默判定（quiescence）</strong>：某信道连续 K 轮（默认 2）无新增事实（纯确认/致谢/重述）→ 冻结该信道，后续只入板</td><td>唯一能真正终止「礼貌性互推」的机制</td><td class="c"><span class="b bad">未实现</span><span class="ev">（P7）</span></td></tr>
     <tr><td class="c mono">FR-C9</td><td><strong>幂等去重</strong>：按 <code>hash(from|to|correlationId|内容摘要)</code> 去重，重复投递丢弃并计数</td><td>重放与回环拦截</td><td class="c"><span class="b ok">已实现</span></td></tr>
     <tr><td class="c mono">FR-C10</td><td><strong>通道预算 + 全局熔断</strong>：边超额只熔断该边；全局超额暂停所有 <code>wake≠never</code> 投递，<strong>仅人工恢复</strong></td><td>熔断后系统仍可被人类读取与干预，而非整体瘫痪</td><td class="c"><span class="b ok">已实现</span></td></tr>
@@ -683,7 +683,7 @@ probe.discarded     {id, by, level}
     <tr><th class="c">ID</th><th>命题</th><th>证据形态</th><th class="c">状态</th></tr>
     <tr><td class="c mono">V-1</td><td>拓扑是可声明的数据：T1a / T1b / T1.5 由开放边集裁剪表达，执行底座深度恒为 1</td><td>fixture 矩阵 + 真机 T1a/T1b 冒烟</td><td class="c"><span class="b ok">达成</span></td></tr>
     <tr><td class="c mono">V-2</td><td>每个顶点独立的 model / reasoningEffort / toolFilter 真实生效（台账 requested = effective）</td><td>运行时探针 + 装配透传测试</td><td class="c"><span class="b ok">达成</span></td></tr>
-    <tr><td class="c mono">V-3</td><td>闭边消息在<strong>收件侧</strong>被拦截并留痕；wake 默认 never；TTL / 去重 / 速率 / 预算熔断生效</td><td>四入口绕过矩阵 + 真机拦截原文</td><td class="c"><span class="b ok">达成</span></td></tr>
+    <tr><td class="c mono">V-3</td><td>闭边消息在<strong>收件侧</strong>被拦截并留痕；wake 默认 never；去重 / 速率 / 预算熔断生效</td><td>四入口绕过矩阵 + 真机拦截原文；TTL 仍为非硬保证（H3.1）</td><td class="c"><span class="b warn">部分</span></td></tr>
     <tr><td class="c mono">V-4</td><td>全局一次审批：计划批准后运行期零组队审批打断</td><td>生命周期转换测试 + 作用域测试</td><td class="c"><span class="b ok">达成</span></td></tr>
     <tr><td class="c mono">V-5</td><td>UI 零图片资产，形状单独可辨，单行总览 + 待决置顶</td><td>资产门禁 + jsdom 结构断言</td><td class="c"><span class="b ok">达成</span></td></tr>
   </table>

@@ -2,9 +2,9 @@
 
 |  |  |
 | --- | --- |
-| 日期 | 2026-10-25 |
-| 版本 | `0.2.1-rc.6` 协议基线；实现目标 `0.3.x-rc.N`（H3.1） |
-| 状态 | H3.0 施工稿；Web 实机已通过，Desktop 已装 rc.6 并保持 disabled，待出品人验收；H3.1 实现前不得宣称更强保证 |
+| 日期 | 2026-10-27 |
+| 版本 | `0.2.1-rc.7` 协议基线（rc.7 预算账域勘误）；实现目标 `0.3.x-rc.N`（H3.1） |
+| 状态 | H3.0 施工稿 + rc.7 账域勘误；rc.6 Web 实机已通过，rc.7 待完整验证与出品人验收；H3.1 实现前不得宣称更强保证 |
 | 范围 | 单 DSH 进程、插件自建组织层；不跨进程、不跨 DSH 实例 |
 | 依据 | 需求 §4.5 / NFR-4 / FR-C9；`D-0.2.1-rc.3-hardening.md`；第 4–7 期第三方全景审计 |
 
@@ -24,11 +24,14 @@
 | --- | --- | --- |
 | **票据 / admission** | 一次发送尝试的唯一身份、路由、内容摘要、预算预留与去重键 | 插件 JSONL `comm.admit` |
 | **已发布 / published** | 宿主 `target.send(...)` 返回且插件已写发布回执 | 插件 `comm.deliver` / `comm.degrade` 回执 |
-| **已消费 / consumed** | 预算从剩余额度转为已用；与是否唤醒无关 | 预算账本（由 admit 预留与失败释放重演） |
+| **边已消费 / edge consumed** | 边预算从剩余额度转为已用；适用于所有真实投递（含 degrade 与 wake=never） | 边预算账本（由 admit 预留与失败释放重演） |
+| **全局唤醒预算已消费 / global consumed** | concourse 级全局预算从剩余额度转为已用；仅适用于 `plan.wake≠never` 的主动唤醒投递 | 全局预算账本；`budget.consume.consumeGlobal` 标识账域 |
 | **未知 / PUBLICATION_UNKNOWN** | 已有 admit，无发布回执，且崩溃/写盘失败使真实发布不可判定 | 恢复对账结果 |
 | **已拒绝 / rejected** | 准入判定为拒绝，消息未进入目标 inbox | `comm.reject` |
 | **恢复 / recovered** | 启动时从 JSONL 有效前缀重建状态并列出未决项，不包含自动重放业务动作 | `replay` + 对账报告 |
 | **torn-tail** | 文件末尾半写记录；不是合法事件，也不是可静默丢弃的坏事件 | 存储加载器隔离区 |
+
+**rc.7 勘误：** concourse 全局预算定义为**主动唤醒预算**。`wake=never`（含 board 归一）仍计边账、去重、TTL、限流，但不检查或扣减 `globalRemaining`，也不会触发全局熔断。`budget.consume` 用 `consumeGlobal` 记录本次账域；旧事件缺该字段时按 `true` 重演，保持历史流解释不变。
 
 **唯一原则：** 事件日志是插件状态的唯一持久权威；内存是派生缓存。任何“内存已改、日志未写”的状态都不得在重启后被当作已提交。
 
@@ -72,10 +75,18 @@ evaluateInbound（只读预检）
 
 ### 3.4 预算
 
-- admit 时按 `tokens` 预留；预算不足按现有 FUSE 逻辑拒绝，不产生 admit。
-- deliver/degrade 回执不再次扣账（防止双扣）。
+- admit 时按 `tokens` 预留：边预算对所有真实投递生效；全局唤醒预算只对 `plan.wake≠never` 生效。边超额拒绝该边，全局不足/已熔断只拒绝唤醒投递，不产生 admit。
+- deliver/degrade 回执不再次扣账（防止双扣）；degrade 仍按其 `plan.wake` 归属账域，`never`/board 只计边账。
+- `budget.consume` 必须记录 `consumeGlobal`（true/false），预检、提交与 replay 使用同一值；禁止在提交阶段重新翻转账域。
 - `delivery-failed` 明确释放预留；`PUBLICATION_UNKNOWN` 保持预留。
-- 旧版事件流（rc.5 及以前）按既有 `budget.consume` 语义重演，**不得**追溯套用新协议；事件格式必须带 schema 版本。
+- 旧版事件流（rc.5/rc.6）按既有 `budget.consume` 语义重演；rc.7 前事件缺 `consumeGlobal` 时按 `true` 解释，不得追溯改账。事件格式必须带 schema 版本。
+
+### 3.5 消息链元数据（H3.1 前置，当前未实现）
+
+- 现状：`team_send` 的 `hops` / `correlationId` 由调用方自报；二者不进入 `DeliveryRequest` 或宿主 `agent-message.source`，转发后不能可信递增或绑定。负 hops 与伪造值可绕过 TTL；反向应答边只建立路由，不建立 correlation 绑定。
+- H3.1 票据须携带 `correlationId`、`hop`、父票据或链身份；投递与 source 同步携带；收件侧从父票据可信计算 `hop+1`，而不是信任调用方参数。
+- reply correlation 必须校验同一链；replay 恢复同一链状态。父票据索引按 admissionId O(1) 查询，不得扫全事件。
+- 在 H3.1 完成前，不得把 FR-C2 / FR-C7 宣称为硬保证；P5 不新增多跳依赖。
 
 ## 4. 生命周期与审批
 
@@ -138,7 +149,7 @@ evaluateInbound（只读预检）
 
 ## 8. 与当前已知残留的映射
 
-| # | 当前现象 | H3.1 处置 | rc.6 口径 |
+| # | 当前现象 | H3.1 处置 | rc.7 口径 |
 | --- | --- | --- | --- |
 | 14 | approve 中断无法 adopt/对账 | intent + vertex-start + 恢复报告 | 仍不宣称恢复 |
 | 15 | post-delivery 写盘失败分叉 | 票据/回执 + PUBLICATION_UNKNOWN | 仍可能未知，但不伪造成功 |
@@ -147,6 +158,7 @@ evaluateInbound（只读预检）
 | 18 | archived/ticket 未成硬边界 | archived 拒绝 + 票据绑定 | P7/P8 前 |
 | 19 | torn-tail 无隔离 | 尾行隔离、中间坏行 fail-loud | 仍需人工处理 |
 | 21 | 同步写/全量深拷贝/无界窗口 | 批量提交 + 快照；不改变提交顺序 | 仍为当前性能限制 |
+| 26 | hops/correlationId 由调用方自报且不随投递传播 | 票据链字段 + source 携带 + 可信 hop+1 + reply correlation 校验 | H3.1 前不宣称硬 TTL 或完整请求应答绑定 |
 
 ## 9. H3.1 验收矩阵
 
@@ -156,7 +168,8 @@ evaluateInbound（只读预检）
 4. dedup/admission 重放后旧票据不可被重复消费。
 5. torn-tail 只隔离尾部；中间坏行 fail-loud；不静默丢事件。
 6. P5 probe 事件通过同一恢复矩阵；零回注断言不回归。
-7. `pnpm verify` 全绿；无 xfail；所有验收有可复核测试与台账证据。
+7. TTL/correlation 链：同链第 2 跳在 TTL=1 时 HOP_LIMIT；TTL=2 的第 3 跳拒绝；调用方负数/伪造 hop 不得改变可信跳数；错配 reply correlation 拒绝；source 与 replay 保留同一链元数据。
+8. `pnpm verify` 全绿；无 xfail；所有验收有可复核测试与台账证据。
 
 ## 10. rc.3–rc.5 修复复核矩阵
 
@@ -174,7 +187,8 @@ evaluateInbound（只读预检）
 - 跨进程/跨 DSH 实例 exactly-once；
 - 自动重发、自动 adopt、自动恢复对话；
 - 未登记故障场景的“应该没问题”；
-- 在 H3.1 完成前把 PUBLICATION_UNKNOWN 说成成功或丢弃为普通失败。
+- 在 H3.1 完成前把 PUBLICATION_UNKNOWN 说成成功或丢弃为普通失败；
+- 在 H3.1 的票据链元数据落地前，宣称 FR-C2 的 correlation 绑定或 FR-C7 的 TTL 是硬保证。
 
 ---
 

@@ -2,7 +2,7 @@
 
 English | [中文](README.zh.md)
 
-**Version:** `0.2.1-rc.6` (DSH baseline `0.2.1-rc.2`; H3.0 protocol, bounded rate limiting, React 18 type alignment and single-build verification; producer acceptance pending) · [Changelog](CHANGELOG.md) · [Requirements](docs/REQUIREMENTS.html) · [Plan](DEVELOPMENT_PLAN.md) · [Collaboration norms](COLLABORATION.md)
+**Version:** `0.2.1-rc.7` (DSH baseline `0.2.1-rc.2`; wake/global wake-budget correctness, runtime self-loop guard, H3.0 protocol and bounded rate limiting; producer acceptance pending) · [Changelog](CHANGELOG.md) · [Requirements](docs/REQUIREMENTS.html) · [Plan](DEVELOPMENT_PLAN.md) · [Collaboration norms](COLLABORATION.md)
 
 The **organizational layer** for DSH: it turns "who may talk to whom, which model and
 reasoning effort each execution unit gets, and how a product finds its way back to the
@@ -48,7 +48,11 @@ has accepted rc.5; this statement does not expand the verified scope beyond the 
 aligns React 18 type contracts and makes the full gate build exactly once. Its Web-profile
 real-machine loop (plan → assign → deliver → closed-edge reject → child reply) passed;
 Desktop is installed but kept `disabled` until producer acceptance. H3.1 recovery remains
-a written protocol, not an implemented promise.
+a written protocol, not an implemented promise. `0.2.1-rc.7` makes `wake: never` and
+`broadcast` truly non-waking at the host boundary, limits the global fuse to wake-capable
+deliveries while keeping edge fuses universal, and rejects runtime self-loop edges before
+they reach the ledger. Hops/correlation chain metadata remain an H3.1 debt and are not
+claimed as a hard TTL or request-reply guarantee.
 
 ## Requirements
 
