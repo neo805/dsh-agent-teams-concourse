@@ -29,7 +29,7 @@
 | **H2** | **契约、通信与回放一致性硬化 + 侧栏可发现性** | `0.2.1-rc.4` | ✅ 已完成 | 417 测试 + 严格门禁 + Web 实机 |
 | **H2.5** | **通信/路由/UI 身份正确性与工程门禁加固** | `0.2.1-rc.5` | ✅ 出品人验收通过 | 448 测试 + pack/plugin 自查 + Web/Desktop 实机验收 |
 | **H2.6 / H3.0** | **硬化出口：协议先行 + 不变量测试 + 限流/契约收口** | `0.2.1-rc.6` | 🟨 代码/单测/全门禁/Web 实机完成；Desktop 已装 disabled，待出品人验收 | H3 ADR + 模型/对拍测试 + RateLimiter 有界化 + 全验证阶梯 |
-| **H2.7 / RC7** | **通信语义断点修复：wake / 全局唤醒预算 / 运行期自环** | `0.2.1-rc.7` | 🟨 施工完成，待完整验证阶梯与出品人验收 | 468 测试 + wake/账域/replay 不变量 + Web/Desktop 阶梯 |
+| **H2.7 / RC7** | **通信语义断点修复：wake / 全局唤醒预算 / 运行期自环** | `0.2.1-rc.7` | 🟨 代码/单测/全门禁/Web 实机完成；Desktop 已装 disabled，待出品人验收 | 468 测试 + wake/账域/replay 不变量 + Web/Desktop 阶梯 |
 | **P5** | **旁路探针 MVP**（隔离 / 摘要 / 句柄 / 回注档） | `0.3.0-rc.1`？ | ⬜ 待 H2.6 与版本批准 | AC-1 / AC-2 / AC-3；不另建事务路径 |
 | **H3.1** | **事务/恢复实现与故障注入** | `0.3.x-rc.N` | ⬜ 待 P5 | 崩溃窗口对账 + live/replay 等价 + torn-tail 策略 |
 | **P6** | **探针生命周期**（七状态 / 四级丢弃 / 遮蔽 / 晋升） | `0.3.x-rc.N` | ⬜ 待 H3.1 | AC-4 / AC-5 |
@@ -135,6 +135,16 @@ P0──P1──P2──P3──P4──[0.1.0 MVP]──[0.2.0 运行时适配]
 | **RC7-3** | 在 `service.link` 写台账前拒绝 `action=open && from===to`，保留 close 清理历史坏数据。 | 工具与直调均返回 INVALID_SPEC，零 edge-open，拓扑不变。 |
 | **RC7-4** | 修订 H3 ADR 的边账/全局唤醒账口径；登记 hops/correlation 可信链缺口到 H3.1 与残留表；同步 rc.7 版本与文档。 | 文档不再宣称 TTL/request-reply 具硬保证；需求范围不扩。 |
 | **RC7-5** | 跑完整验证阶梯：verify、pack/plugin_check、Web 实机、Desktop disabled，再本地提交。 | 四项覆盖率 ≥90%，实机证据可复核，未经批准不 push。 |
+
+**验证记录（2026-10-27）**：
+
+- 红灯证据：RC7-1 `team-send` 2 failed（never/board 的实际 `wakeup` 为 true）；RC7-2 全局账域 3 failed；RC7-3 自环工具/直调各 1 failed。
+- `pnpm verify`：**60 文件 / 468 测试全绿**；coverage statements/lines `98.44%`、branches `90.93%`、functions `99.09%`；boundaries/assets/pack-smoke 通过。
+- 标准 tarball：17 文件，SHA-256 `E1AAEBCA…2BF40`；安装专用副本内容相同、哈希相同。
+- Web：rc.7 安装 17/17 文件哈希一致；`--dump-config` 退出 0、concourse 行启用、裸 import 正常；`plugin_check` 未见 concourse 问题（仅既有 `dsh-excel-chat` 的 npm 依赖问题）。
+- Web 实机（`session-ccb5a1b8-19c2-443f-ab54-419439aa2ec8`，port 62260）：`team_plan → team_assign` 成功；长任务 live child 下，never 投递为 `consumeGlobal:false`、on-reply 为 `true`（ledger seq 32–37）。全局熔断场景（seq 49–53）：on-reply `FUSE_GLOBAL`，随后 never 仍 `deliver` 且全局账未变；`team_status` 报全局熔断为“是”。`team_link` 自环返回 `INVALID_SPEC`，`edge-open=0`。
+- 限制：child 自然结束后再次投递得到既有 `TARGET_UNAVAILABLE`（seq 55–56），因此未能用空闲 live child 直接观察 never/on-reply 的 turn 差异；该差异由 service/host 单测覆盖，不把本条实机结果升级为 wake 已验证。
+- Desktop：rc.7 安装 17/17 文件哈希一致；`include:concourse` 为 `enabled:false`、`fiberPhase:null`，patch `disabled:true`；未重启 Desktop，视觉/功能验收留给出品人。`--dump-config` 被宿主拒绝仅因 Electron 管理 profile，不是插件失败。
 
 **明确不进入本阶段**：TTL/correlation 实现（并入 H3.1 票据协议），以及 Catalog 并发、AgentDirectory、UI 数据桥、suggest 线性化等既有 P7/P9 项。
 

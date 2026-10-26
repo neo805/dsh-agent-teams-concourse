@@ -41,6 +41,9 @@ child 应答）已通过；Desktop 已安装但保持 `disabled`，待出品人�
 成文协议，不是已实现承诺。`0.2.1-rc.7` 让 `wake: never` 与广播在宿主边界真正不唤醒，
 把全局熔断限定为主动唤醒投递、保留边熔断对所有投递生效，并在写台账前拒绝运行期自环。
 `hops`/`correlationId` 链元数据仍是 H3.1 债务，修复前不宣称硬 TTL 或完整请求应答绑定。
+rc.7 全门禁通过（60 文件 / 468 测试）；Web profile 已验证正常投递、全局熔断账域分离与
+自环拒绝，空闲 child 仍受既有 `TARGET_UNAVAILABLE` 限制。Desktop 已安装 rc.7 并保持
+`disabled`，待出品人验收。
 
 ## 前置条件
 

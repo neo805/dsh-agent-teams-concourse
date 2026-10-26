@@ -52,7 +52,10 @@ a written protocol, not an implemented promise. `0.2.1-rc.7` makes `wake: never`
 `broadcast` truly non-waking at the host boundary, limits the global fuse to wake-capable
 deliveries while keeping edge fuses universal, and rejects runtime self-loop edges before
 they reach the ledger. Hops/correlation chain metadata remain an H3.1 debt and are not
-claimed as a hard TTL or request-reply guarantee.
+claimed as a hard TTL or request-reply guarantee. RC7's full gate passed (60 files / 468
+tests); its Web profile verified normal delivery, the global-fuse split and self-loop
+rejection, while an idle child still hits the known `TARGET_UNAVAILABLE` limit. Desktop is
+installed as rc.7 and kept `disabled` pending producer acceptance.
 
 ## Requirements
 
