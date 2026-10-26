@@ -132,7 +132,7 @@ describe('改边后的预算回放等价', () => {
         { id: 'a', origin: 'self' },
         { id: 'b', parent: 'a', layer: 1 },
       ],
-      edges: [{ from: 'a', to: 'b', budget: { tokens: 40 } }],
+      edges: [{ from: 'a', to: 'b', wake: 'on-reply', budget: { tokens: 40 } }],
     });
     service.submit('c-edge-budget');
     await service.approve('c-edge-budget', { id: 'root' });
@@ -146,7 +146,12 @@ describe('改边后的预算回放等价', () => {
     expect(service.runtime('c-edge-budget').budget.remainingEdge('a', 'b')).toBe(38);
 
     service.link('c-edge-budget', { from: 'a', to: 'b', action: 'close' });
-    service.link('c-edge-budget', { from: 'a', to: 'b', action: 'open' });
+    service.link('c-edge-budget', {
+      from: 'a',
+      to: 'b',
+      action: 'open',
+      wake: 'on-reply',
+    });
     expect(service.runtime('c-edge-budget').budget.remainingEdge('a', 'b')).toBeUndefined();
 
     // 40 tokens：live 重开后该边无预算，只能走全局账；replay 若保留旧边预算会误判 FUSE_EDGE。

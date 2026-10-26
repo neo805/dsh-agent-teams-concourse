@@ -126,7 +126,7 @@ describe('rate 层', () => {
         { id: 'a', origin: 'self' },
         { id: 'b', parent: 'a', layer: 1 },
       ],
-      edges: [{ from: 'a', to: 'b', rate: { n: 1, perMs: 1000 } }],
+      edges: [{ from: 'a', to: 'b', wake: 'on-reply', rate: { n: 1, perMs: 1000 } }],
     });
     const ledger = new Ledger({ now: clock.now });
     const rt = createRuntime(c, { now: clock.now });
@@ -223,7 +223,7 @@ describe('budget 层', () => {
     });
   });
 
-  it('全局预算超额 → reject(FUSE_GLOBAL)', () => {
+  it('唤醒投递超全局预算 → reject(FUSE_GLOBAL)', () => {
     const c = parseConcourse({
       id: 'c-global',
       tier: 'T1a',
@@ -232,11 +232,94 @@ describe('budget 层', () => {
         { id: 'a', origin: 'self' },
         { id: 'b', parent: 'a', layer: 1 },
       ],
-      edges: [{ from: 'a', to: 'b' }],
+      edges: [{ from: 'a', to: 'b', wake: 'on-reply' }],
     });
     const rt = createRuntime(c);
     const out = admitInbound(rt, msg({ content: '12345678' }));
     expect(out).toMatchObject({ kind: 'reject', reason: 'FUSE_GLOBAL' });
+  });
+
+  it('全局熔断只暂停 wake≠never：never/board 仍投递且不改变全局账', () => {
+    const clock = manualClock();
+    const ledger = new Ledger({ now: clock.now });
+    const c = parseConcourse({
+      id: 'c-global-wake',
+      tier: 'T1a',
+      budget: { tokens: 3 },
+      vertices: [
+        { id: 'a', origin: 'self' },
+        { id: 'b', parent: 'a', layer: 1 },
+        { id: 'c', parent: 'a', layer: 1 },
+        { id: 'd', parent: 'a', layer: 1 },
+      ],
+      edges: [
+        { from: 'a', to: 'b', wake: 'on-reply' },
+        { from: 'a', to: 'c', wake: 'never' },
+        { from: 'a', to: 'd', mode: 'board', wake: 'always' },
+      ],
+    });
+    const rt = createRuntime(c, { now: clock.now });
+
+    // 两次 2-token 唤醒投递：第一次剩 1，第二次触发全局熔断。
+    expect(admitInbound(rt, msg({ to: 'b', content: '12345678' }), { ledger }).kind).toBe('deliver');
+    expect(rt.budget.remainingGlobal()).toBe(1);
+    expect(admitInbound(rt, msg({ to: 'b', content: 'abcdefgh' }), { ledger })).toMatchObject({
+      kind: 'reject',
+      reason: 'FUSE_GLOBAL',
+    });
+    expect(rt.budget.isGlobalFused()).toBe(true);
+    expect(rt.budget.remainingGlobal()).toBe(1);
+
+    const neverMsg = msg({ to: 'c', content: 'never-message' });
+    const neverPlan = evaluateInbound(rt, neverMsg);
+    expect(neverPlan).toMatchObject({ verdict: 'deliver', wake: 'never', consumeGlobal: false });
+    expect(commitInbound(rt, neverMsg, neverPlan, ledger)).toMatchObject({
+      kind: 'deliver',
+      wake: 'never',
+    });
+
+    const boardMessage = msg({ to: 'd', content: 'board-message' });
+    const boardPlan = evaluateInbound(rt, boardMessage);
+    expect(boardPlan).toMatchObject({ verdict: 'deliver', wake: 'never', consumeGlobal: false });
+    expect(commitInbound(rt, boardMessage, boardPlan, ledger)).toMatchObject({
+      kind: 'deliver',
+      wake: 'never',
+    });
+
+    expect(rt.budget.remainingGlobal()).toBe(1);
+    expect(rt.budget.isGlobalFused()).toBe(true);
+    expect(admitInbound(rt, msg({ to: 'b', content: 'still-fused' }), { ledger })).toMatchObject({
+      kind: 'reject',
+      reason: 'FUSE_GLOBAL',
+    });
+
+    const consumes = ledger.query({ kind: 'budget', action: 'consume' });
+    expect(consumes.map((e) => e.detail['consumeGlobal'])).toEqual([true, true, false, false, true]);
+  });
+
+  it('never 的边预算仍独立生效：FUSE_EDGE 不触发全局熔断', () => {
+    const ledger = new Ledger({ now: () => 0 });
+    const c = parseConcourse({
+      id: 'c-edge-never',
+      tier: 'T1a',
+      budget: { tokens: 100 },
+      vertices: [
+        { id: 'a', origin: 'self' },
+        { id: 'b', parent: 'a', layer: 1 },
+      ],
+      edges: [{ from: 'a', to: 'b', wake: 'never', budget: { tokens: 1 } }],
+    });
+    const rt = createRuntime(c, { now: () => 0 });
+
+    const out = admitInbound(rt, msg({ content: '12345678' }), { ledger });
+    expect(out).toMatchObject({ kind: 'reject', reason: 'FUSE_EDGE' });
+    expect(rt.budget.isFusedEdge('a', 'b')).toBe(true);
+    expect(rt.budget.isGlobalFused()).toBe(false);
+    expect(rt.budget.remainingGlobal()).toBe(100);
+    expect(ledger.query({ kind: 'budget', action: 'consume' }).at(-1)?.detail).toMatchObject({
+      result: 'fuse-edge',
+      consumeGlobal: false,
+    });
   });
 });
 

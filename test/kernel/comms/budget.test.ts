@@ -91,6 +91,31 @@ describe('全局预算（D2）', () => {
     expect(b.consumeEdge('x', 'y', 1)).toBe('ok');
   });
 
+  it('consumeGlobal:false 只计边账，不改全局余额或全局熔断', () => {
+    const b = new BudgetBook({
+      edgeBudgets: { [key('a', 'b')]: 5 },
+      globalBudget: 10,
+    });
+    expect(b.canConsume('a', 'b', 4, { consumeGlobal: false })).toBe('ok');
+    expect(b.consumeEdge('a', 'b', 4, { consumeGlobal: false })).toBe('ok');
+    expect(b.remainingEdge('a', 'b')).toBe(1);
+    expect(b.remainingGlobal()).toBe(10);
+
+    expect(b.consumeEdge('a', 'b', 2, { consumeGlobal: false })).toBe('fuse-edge');
+    expect(b.isFusedEdge('a', 'b')).toBe(true);
+    expect(b.isGlobalFused()).toBe(false);
+    expect(b.remainingGlobal()).toBe(10);
+  });
+
+  it('全局熔断后 consumeGlobal:false 仍只检查边账', () => {
+    const b = new BudgetBook({ globalBudget: 1 });
+    b.consumeEdge('a', 'b', 2);
+    expect(b.isGlobalFused()).toBe(true);
+    expect(b.canConsume('a', 'b', 1, { consumeGlobal: false })).toBe('ok');
+    expect(b.consumeEdge('a', 'b', 1, { consumeGlobal: false })).toBe('ok');
+    expect(b.remainingGlobal()).toBe(1);
+  });
+
   it('无全局预算时 remainingGlobal 为 undefined，永不全局熔断', () => {
     const b = new BudgetBook({ edgeBudgets: { [key('a', 'b')]: 1 } });
     expect(b.remainingGlobal()).toBeUndefined();

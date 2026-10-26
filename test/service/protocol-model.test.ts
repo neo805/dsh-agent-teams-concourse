@@ -78,4 +78,94 @@ describe('H3.0 当前协议模型：live 与 replay 等价', () => {
     expect(rc?.concourse.edges).toEqual(service.get('demo').concourse.edges);
     expect(rc?.budget.remainingGlobal()).toBe(service.runtime('demo').budget.remainingGlobal());
   });
+
+  it('全局预算按唤醒账域分配：never 不扣全局，live/replay 的余额与熔断全等', async () => {
+    const clock = manualClock();
+    const store = createMemoryStore();
+    const ledger = new Ledger({
+      now: clock.now,
+      sink: (event: LedgerEvent) => store.append(event),
+    });
+    const substrate = new StubSubstrate();
+    const service = new ConcourseService({ substrate, ledger, now: clock.now });
+    const spec = {
+      ...SAMPLE_SPEC,
+      budget: { tokens: 1 },
+      tasks: [],
+      edges: [
+        { from: 'lead', to: 'a', mode: 'notify', wake: 'never', hopTTL: 2 },
+        { from: 'lead', to: 'b', mode: 'notify', wake: 'on-reply', hopTTL: 2 },
+      ],
+    };
+    service.create(spec);
+    service.submit('demo');
+    await service.approve('demo', { id: ROOT_AGENT_ID });
+
+    // 2-token never 超过全局额度仍投递；全局余额与熔断状态不变。
+    expect(
+      service.send('demo', { from: 'lead', to: 'a', content: 'never-one' }, { id: ROOT_AGENT_ID }),
+    ).toMatchObject({ outcome: 'deliver', wake: 'never' });
+    expect(service.runtime('demo').budget.remainingGlobal()).toBe(1);
+    expect(service.runtime('demo').budget.isGlobalFused()).toBe(false);
+
+    // 唤醒投递触发全局熔断。
+    expect(
+      service.send('demo', { from: 'lead', to: 'b', content: 'wake-fuse' }, { id: ROOT_AGENT_ID }),
+    ).toMatchObject({ outcome: 'reject', reason: 'FUSE_GLOBAL' });
+    expect(service.runtime('demo').budget.remainingGlobal()).toBe(1);
+    expect(service.runtime('demo').budget.isGlobalFused()).toBe(true);
+
+    // 熔断后 never 仍可投递，且不改变全局账。
+    expect(
+      service.send('demo', { from: 'lead', to: 'a', content: 'never-two' }, { id: ROOT_AGENT_ID }),
+    ).toMatchObject({ outcome: 'deliver', wake: 'never' });
+    expect(service.runtime('demo').budget.remainingGlobal()).toBe(1);
+    expect(service.runtime('demo').budget.isGlobalFused()).toBe(true);
+
+    const events = store.load();
+    expect(
+      ledger
+        .query({ kind: 'budget', action: 'consume' })
+        .map((event) => event.detail['consumeGlobal']),
+    ).toEqual([false, true, false]);
+
+    const revived = replay(events).concourses[0];
+    const liveBudget = service.runtime('demo').budget;
+    expect(revived?.budget.remainingGlobal()).toBe(liveBudget.remainingGlobal());
+    expect(revived?.budget.isGlobalFused()).toBe(liveBudget.isGlobalFused());
+    expect(revived?.budget.remainingEdge('lead', 'a')).toBe(
+      liveBudget.remainingEdge('lead', 'a'),
+    );
+  });
+
+  it('旧 budget.consume 缺 consumeGlobal 时按旧口径计入全局账', () => {
+    const oldEvents: LedgerEvent[] = [
+      {
+        seq: 1,
+        at: 1,
+        concourseId: 'old',
+        kind: 'lifecycle',
+        action: 'create',
+        detail: {
+          concourse: {
+            ...SAMPLE_SPEC,
+            id: 'old',
+            budget: { tokens: 10 },
+            edges: [{ from: 'lead', to: 'a', mode: 'notify', wake: 'never', hopTTL: 2 }],
+          },
+        },
+      },
+      {
+        seq: 2,
+        at: 2,
+        concourseId: 'old',
+        kind: 'budget',
+        action: 'consume',
+        detail: { from: 'lead', to: 'a', tokens: 3, result: 'ok' },
+      },
+    ];
+    const revived = replay(oldEvents).concourses[0];
+    expect(revived?.budget.remainingGlobal()).toBe(7);
+    expect(revived?.budget.isGlobalFused()).toBe(false);
+  });
 });
