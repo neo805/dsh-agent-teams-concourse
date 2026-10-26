@@ -518,6 +518,13 @@ export class ConcourseService {
     if (!ids.has(input.from) || !ids.has(input.to)) {
       throw new ConcourseError('UNKNOWN_VERTEX', `顶点不存在：${[input.from, input.to].filter((v) => !ids.has(v)).join(' / ')}`);
     }
+    if (input.action === 'open' && input.from === input.to) {
+      throw new ConcourseError(
+        'INVALID_SPEC',
+        `边不允许自环：${input.from}→${input.to}`,
+        [{ code: 'SELF_LOOP', message: '运行期开边不得指向自身', path: 'edge' }],
+      );
+    }
     let detail: Record<string, unknown>;
     if (input.action === 'open') {
       try {
