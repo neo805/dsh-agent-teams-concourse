@@ -204,6 +204,24 @@ describe('运行期改边参数校验', () => {
     expect(fx.ledger.query({ action: 'edge-open' })).toHaveLength(0);
   });
 
+  test('直调 service.link 开自环在写台账前失败，拓扑不变', async () => {
+    const fx = makeFixture();
+    await makeRunning(fx);
+    const before = fx.service.get('demo').concourse.edges;
+    for (const mode of ['notify', 'request-reply'] as const) {
+      let error: unknown;
+      try {
+        fx.service.link('demo', { from: 'a', to: 'a', action: 'open', mode });
+      } catch (err) {
+        error = err;
+      }
+      expect(error).toBeInstanceOf(ConcourseError);
+      expect((error as ConcourseError).code).toBe('INVALID_SPEC');
+    }
+    expect(fx.service.get('demo').concourse.edges).toEqual(before);
+    expect(fx.ledger.query({ action: 'edge-open' })).toHaveLength(0);
+  });
+
   test('hopTTL=1 可开边，第一跳投递、第二跳 HOP_LIMIT', async () => {
     const fx = makeFixture();
     await makeRunning(fx);

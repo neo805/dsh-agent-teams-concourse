@@ -118,6 +118,22 @@ describe('team_link', () => {
     expect(fx.ledger.query({ action: 'edge-open' })).toHaveLength(0);
   });
 
+  test('运行期自环（notify/request-reply）拒绝：INVALID_SPEC、零台账、拓扑不变', async () => {
+    const fx = makeFixture();
+    await makeRunning(fx);
+    const tool = createTeamLinkTool(fx.deps);
+    const before = fx.service.get('demo').concourse.edges;
+    for (const mode of ['notify', 'request-reply'] as const) {
+      const out = (await tool.execute(
+        { id: 'demo', from: 'a', to: 'a', action: 'open', mode },
+        fakeExec(),
+      )) as LinkOut;
+      expect(out).toMatchObject({ ok: false, code: 'INVALID_SPEC' });
+    }
+    expect(fx.service.get('demo').concourse.edges).toEqual(before);
+    expect(fx.ledger.query({ action: 'edge-open' })).toHaveLength(0);
+  });
+
   test('非 running 状态拒绝（draft）', async () => {
     const fx = makeFixture();
     fx.service.create({
