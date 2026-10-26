@@ -174,6 +174,8 @@ export function replay(events: readonly LedgerEvent[]): ReplayState {
         e.detail['from'] as string,
         e.detail['to'] as string,
         e.detail['tokens'] as number,
+        // rc.7 起写 consumeGlobal；旧事件缺字段时沿用“所有消费都计全局账”的旧口径。
+        { consumeGlobal: e.detail['consumeGlobal'] !== false },
       );
     }
   }

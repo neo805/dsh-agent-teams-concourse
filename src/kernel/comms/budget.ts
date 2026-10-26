@@ -5,6 +5,8 @@
  *     不殃及团队其他边；人工 resumeEdge 恢复。
  * D2：全局 tokens 超全局预算 → 全局熔断，语义 = 暂停所有 wake≠never 的投递；
  *     仅人工 resumeGlobal 恢复（自动恢复会让风暴死灰复燃）。
+ *     因此全局账是「主动唤醒预算」：wake=never 的真实投递只计入边账，
+ *     调用方须显式传 consumeGlobal=false（缺省 true，兼容旧语义）。
  *
  * 一切熔断与恢复都应由调用方留痕（E2）；本类只提供纯判定与账目。
  * 无预算登记的边 consume 只记全局账。
@@ -33,12 +35,24 @@ export class BudgetBook {
   }
 
   /** 只读判定：当前是否还能在该边消费 tokens（不改变账目）。 */
-  canConsume(from: string, to: string, tokens: number): 'ok' | 'fuse-edge' | 'fuse-global' {
+  canConsume(
+    from: string,
+    to: string,
+    tokens: number,
+    options: { readonly consumeGlobal?: boolean } = {},
+  ): 'ok' | 'fuse-edge' | 'fuse-global' {
     this.assertPositive(tokens);
-    if (this.globalFused) return 'fuse-global';
+    const consumeGlobal = options.consumeGlobal ?? true;
+    if (consumeGlobal && this.globalFused) return 'fuse-global';
     const key = BudgetBook.edgeKey(from, to);
     if (this.fusedEdges.has(key)) return 'fuse-edge';
-    if (this.globalRemaining !== undefined && tokens > this.globalRemaining) return 'fuse-global';
+    if (
+      consumeGlobal &&
+      this.globalRemaining !== undefined &&
+      tokens > this.globalRemaining
+    ) {
+      return 'fuse-global';
+    }
     const edgeRem = this.edgeRemaining.get(key);
     if (edgeRem !== undefined && tokens > edgeRem) return 'fuse-edge';
     return 'ok';
@@ -46,16 +60,27 @@ export class BudgetBook {
 
   /**
    * 尝试在 from→to 边上消费 tokens。
+   * consumeGlobal=false 时只计边账（wake=never 的不唤醒投递）。
    * @throws RangeError tokens 为非正数（非法输入，计划期就该拦下）
    */
-  consumeEdge(from: string, to: string, tokens: number): 'ok' | 'fuse-edge' | 'fuse-global' {
+  consumeEdge(
+    from: string,
+    to: string,
+    tokens: number,
+    options: { readonly consumeGlobal?: boolean } = {},
+  ): 'ok' | 'fuse-edge' | 'fuse-global' {
     this.assertPositive(tokens);
-    if (this.globalFused) return 'fuse-global';
+    const consumeGlobal = options.consumeGlobal ?? true;
+    if (consumeGlobal && this.globalFused) return 'fuse-global';
     const key = BudgetBook.edgeKey(from, to);
     if (this.fusedEdges.has(key)) return 'fuse-edge';
 
-    // D2 全局账先算：超全局预算 → 全局熔断（本次消费不入账）
-    if (this.globalRemaining !== undefined && tokens > this.globalRemaining) {
+    // D2 全局唤醒账先算：超全局预算 → 全局熔断（本次消费不入账）
+    if (
+      consumeGlobal &&
+      this.globalRemaining !== undefined &&
+      tokens > this.globalRemaining
+    ) {
       this.globalFused = true;
       return 'fuse-global';
     }
@@ -68,7 +93,9 @@ export class BudgetBook {
     }
 
     if (edgeRem !== undefined) this.edgeRemaining.set(key, edgeRem - tokens);
-    if (this.globalRemaining !== undefined) this.globalRemaining -= tokens;
+    if (consumeGlobal && this.globalRemaining !== undefined) {
+      this.globalRemaining -= tokens;
+    }
     return 'ok';
   }
 
