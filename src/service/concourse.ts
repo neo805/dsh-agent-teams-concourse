@@ -435,7 +435,9 @@ export class ConcourseService {
         target: handle,
         senderId,
         content: input.content,
-        wakeup: plan.verdict === 'deliver',
+        // wake 是边的投递语义，不是台账标签：never（含 board 归一）只入 inbox，
+        // 不触发目标新一轮推理；degrade 同样永不唤醒。
+        wakeup: plan.verdict === 'deliver' && (plan.wake ?? 'never') !== 'never',
         ...(signal !== undefined ? { signal } : {}),
       });
     } catch (err) {
