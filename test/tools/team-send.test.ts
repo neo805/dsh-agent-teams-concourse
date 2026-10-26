@@ -32,6 +32,34 @@ describe('team_send', () => {
     expect(fx.substrate.deliveries[0]?.wakeup).toBe(true);
   });
 
+  test.each([
+    { mode: 'notify', wake: 'never', expectedWakeup: false },
+    { mode: 'board', wake: 'always', expectedWakeup: false },
+    { mode: 'notify', wake: 'always', expectedWakeup: true },
+    { mode: 'request-reply', wake: 'on-reply', expectedWakeup: true },
+  ] as const)(
+    'wake 策略落到宿主调用：mode=$mode wake=$wake → wakeup=$expectedWakeup',
+    async ({ mode, wake, expectedWakeup }) => {
+      const fx = makeFixture();
+      await makeRunning(fx, {
+        ...SAMPLE_SPEC,
+        edges: [{ from: 'lead', to: 'a', mode, wake, hopTTL: 2 }],
+      });
+      const tool = createTeamSendTool(fx.deps);
+      const out = (await tool.execute(
+        { id: 'demo', from: 'lead', to: 'a', content: '唤醒策略矩阵' },
+        fakeExec({ id: ROOT_AGENT_ID }),
+      )) as SendOut;
+      expect(out).toMatchObject({
+        ok: true,
+        outcome: 'deliver',
+        wake: mode === 'board' ? 'never' : wake,
+      });
+      expect(fx.substrate.deliveries).toHaveLength(1);
+      expect(fx.substrate.deliveries[0]?.wakeup).toBe(expectedWakeup);
+    },
+  );
+
   test('reject：闭边原样返回 EDGE_CLOSED + candidates + 台账留痕（不投递）', async () => {
     const fx = makeFixture();
     await makeRunning(fx);
