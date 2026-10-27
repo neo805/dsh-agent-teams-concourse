@@ -139,4 +139,48 @@ describe('RateLimiter 参考对拍与有界性', () => {
     const internal = rl as unknown as { stamps: number[] };
     expect(internal.stamps.length).toBeLessThanOrEqual(n);
   });
+
+  it('RC8-2 原始最小反例：回退后插入的旧戳不得造成虚假 degrade', () => {
+    const actual = new RateLimiter({ n: 3, perMs: 1 }, () => 0);
+    const reference = new ReferenceRateLimiter({ n: 3, perMs: 1 });
+    for (const at of [-2, 0, -2, 0, -2]) {
+      expect(actual.check(at), `check at=${at}`).toBe(reference.check(at));
+    }
+  });
+
+  it('RC8-2 第二反例：简单的 > → >= 仍会发散', () => {
+    const actual = new RateLimiter({ n: 3, perMs: 1 }, () => 0);
+    const reference = new ReferenceRateLimiter({ n: 3, perMs: 1 });
+    for (const at of [-2, 1, -2, 0, -2]) {
+      expect(actual.wouldDegrade(at), `pre-would at=${at}`).toBe(reference.wouldDegrade(at));
+      expect(actual.check(at), `check at=${at}`).toBe(reference.check(at));
+      expect(actual.wouldDegrade(at), `post-would at=${at}`).toBe(reference.wouldDegrade(at));
+    }
+  });
+
+  it('RC8-2 有界穷举：短乱序序列逐操作对拍且窗口始终 ≤ n', () => {
+    const values = [-2, 0, 1, 3];
+    for (const n of [1, 2, 3]) {
+      for (const perMs of [1, 3]) {
+        for (let code = 0; code < values.length ** 4; code += 1) {
+          let rest = code;
+          const ats: number[] = [];
+          for (let i = 0; i < 4; i += 1) {
+            ats.push(values[rest % values.length]!);
+            rest = Math.floor(rest / values.length);
+          }
+          const actual = new RateLimiter({ n, perMs }, () => 0);
+          const reference = new ReferenceRateLimiter({ n, perMs });
+          for (const at of ats) {
+            const context = `n=${n} perMs=${perMs} seq=${ats.join(',')} at=${at}`;
+            expect(actual.wouldDegrade(at), `pre-would ${context}`).toBe(reference.wouldDegrade(at));
+            expect(actual.check(at), `check ${context}`).toBe(reference.check(at));
+            expect(actual.wouldDegrade(at), `post-would ${context}`).toBe(reference.wouldDegrade(at));
+            const internal = actual as unknown as { stamps: number[] };
+            expect(internal.stamps.length, `bound ${context}`).toBeLessThanOrEqual(n);
+          }
+        }
+      }
+    }
+  });
 });
