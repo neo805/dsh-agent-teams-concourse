@@ -170,6 +170,59 @@ describe('cordis 入口', () => {
     ).resolves.toMatchObject({ kind: 'enter' });
   });
 
+  test('RC8-1 真实入口：官方 never 消息重排到目标 inbox，下一轮凭票据进入模型', async () => {
+    const ctx = makeCtx();
+    await apply(ctx, { enabled: true });
+    const tool = (toolName: string): ToolDefinition => {
+      const found = ctx.tools.registered.find((d) => d.name === toolName);
+      if (found === undefined) throw new Error(`missing tool ${toolName}`);
+      return found;
+    };
+    const neverSpec = {
+      ...SAMPLE_SPEC,
+      edges: [{ from: 'lead', to: 'a', mode: 'notify', wake: 'never', hopTTL: 2 }],
+    };
+    await tool('team_plan').execute({ spec: neverSpec }, fakeExec());
+    await tool('team_assign').execute({ id: 'demo' }, fakeExec({ id: 'root-agent' }));
+
+    const gate = ctx.listeners.find((l) => l.event === 'agent/pre-step');
+    expect(gate).toBeDefined();
+    const appended: { target: string; message: unknown }[] = [];
+    const targetAgent = {
+      id: 'child-1',
+      inbox: {
+        append(t: string, message: unknown) {
+          appended.push({ target: t, message });
+        },
+      },
+    };
+    const raw = createUserMessage({
+      content: [{ type: 'text', text: 'official never' }],
+      source: { kind: 'agent-message', form: 'relay', senderSessionId: 'root-agent' } as never,
+    });
+    const first = (await gate!.listener(
+      { agent: targetAgent },
+      async () => ({ kind: 'enter', messages: [raw] }),
+    )) as { kind: string; messages?: unknown[] };
+    expect(first.kind).toBe('reject');
+    expect(appended).toHaveLength(1);
+    expect(appended[0]?.target).toBe('next-turn');
+    const ticketed = appended[0]?.message as {
+      source?: { kind?: string; concourse?: { id?: string; admissionId?: string } };
+    };
+    expect(ticketed.source?.kind).toBe('agent-message');
+    expect(ticketed.source?.concourse?.id).toBe('demo');
+    expect(ticketed.source?.concourse?.admissionId).toMatch(/^[0-9a-f-]{36}$/);
+
+    const second = (await gate!.listener(
+      { agent: targetAgent },
+      async () => ({ kind: 'enter', messages: [ticketed] }),
+    )) as { kind: string; messages?: unknown[] };
+    expect(second.kind).toBe('enter');
+    expect(second.messages).toEqual([ticketed]);
+    expect(appended).toHaveLength(1);
+  });
+
   test('宿主 ctx.on 缺席：跳过 inbound gate 分支，不产生 warn', async () => {
     const ctx = makeCtx();
     ctx.on = undefined as never;
