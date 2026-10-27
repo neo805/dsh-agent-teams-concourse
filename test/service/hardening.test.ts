@@ -166,6 +166,26 @@ describe('发送与准入的防御分支', () => {
     expect(fx.ledger.query({ kind: 'comm', action: 'deliver' })).toHaveLength(0);
   });
 
+  test('RC8-4 缺 senderSessionId：移除消息并留 UNKNOWN_VERTEX 拒绝痕，不扣预算', async () => {
+    const fx = makeFixture();
+    await makeRunning(fx);
+    const missing = {
+      content: [{ type: 'text', text: 'missing identity' }],
+      source: { kind: 'agent-message', form: 'relay' },
+    };
+    expect(fx.service.filterInbound('child-b', [missing])).toEqual([]);
+    const rejects = fx.ledger.query({ kind: 'comm', action: 'reject' });
+    expect(rejects).toHaveLength(1);
+    expect(rejects[0]?.detail).toMatchObject({
+      from: '<missing-sender>',
+      to: 'b',
+      reason: 'UNKNOWN_VERTEX',
+    });
+    expect(fx.ledger.query({ kind: 'comm', action: 'deliver' })).toHaveLength(0);
+    expect(fx.ledger.query({ kind: 'budget', action: 'consume' })).toHaveLength(0);
+    expect(fx.service.runtime('demo').admissions.size).toBe(0);
+  });
+
   test('link 要求 running 且顶点存在；replay 接受非法 edge detail 不崩溃', async () => {
     const fx = makeFixture();
     fx.service.create(SAMPLE_SPEC);
