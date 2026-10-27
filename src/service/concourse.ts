@@ -218,7 +218,7 @@ export class ConcourseService {
       throw new ConcourseError('INVALID_SPEC', `concourse id「${concourse.id}」已存在`);
     }
     // 先落盘，再发布内存状态：sink 失败时调用方看到失败且 service 不变。
-    this.ledger.append({
+    const createEvent = this.ledger.append({
       concourseId: concourse.id,
       kind: 'lifecycle',
       action: 'create',
@@ -227,7 +227,7 @@ export class ConcourseService {
     const entry: Entry = {
       concourse,
       status: 'draft',
-      createdAt: this.now(),
+      createdAt: createEvent.at,
       estimatedTokens: Math.ceil(analysis.estimate?.total ?? 0),
       handles: [],
       runtime: createRuntime(concourse, { now: this.now }),
@@ -396,11 +396,13 @@ export class ConcourseService {
       return { outcome: 'error', code: 'IDENTITY_MISMATCH', message: 'team_send 需要真实调用方 Agent 作为身份凭据' };
     }
     let fromVertex = this.vertexOfAgent(entry, senderId);
-    // 审批前领队首次派活：上下文里只有它自己的 live Agent，可据此绑定 self 顶点。
+    let provisionalSelf = false;
+    // 审批前领队首次派活：上下文里只有它自己的 live Agent，可临时据此识别
+    // self 顶点；只有消息真正提交成功后才落 rootSessionId，失败调用不留身份副作用。
     if (fromVertex === undefined && entry.rootSessionId === undefined && entry.handles.length === 0) {
       const requested = entry.concourse.vertices.find((v) => v.id === input.from);
       if (requested?.origin === 'self') {
-        entry.rootSessionId = senderId;
+        provisionalSelf = true;
         fromVertex = requested.id;
       }
     }
@@ -465,6 +467,9 @@ export class ConcourseService {
     const out = commitInbound(entry.runtime, msg, plan, this.ledger);
     if (out.kind === 'deliver' || out.kind === 'degrade') {
       entry.runtime.admissions.set(admissionId, out.kind);
+      if (provisionalSelf && entry.rootSessionId === undefined) {
+        entry.rootSessionId = senderId;
+      }
     }
     return { ...fromOutcome(out), childId: targetId };
   }
