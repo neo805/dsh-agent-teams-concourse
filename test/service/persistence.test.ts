@@ -198,6 +198,25 @@ describe('改边后的预算回放等价', () => {
     });
     expect(revived.get('c-persist').createdAt).toBe(created.createdAt);
   });
+
+  it('RC8-5 createdAt 只读 create 事件时钟，不受 service 时钟偏移影响', () => {
+    const store = createMemoryStore();
+    const ledger = new Ledger({ now: () => 1000, sink: (e) => store.append(e) });
+    const service = new ConcourseService({
+      substrate: new StubSubstrate(),
+      ledger,
+      now: () => 2000,
+    });
+    const created = service.create(t1aInput());
+    expect(created.createdAt).toBe(1000);
+    const revived = new ConcourseService({
+      substrate: new StubSubstrate(),
+      ledger: new Ledger({ snapshot: store.load() }),
+      now: () => 9000,
+      snapshot: replay(store.load()),
+    });
+    expect(revived.get('c-persist').createdAt).toBe(1000);
+  });
 });
 
 describe('改边后的熔断状态恢复', () => {

@@ -186,6 +186,26 @@ describe('发送与准入的防御分支', () => {
     expect(fx.service.runtime('demo').admissions.size).toBe(0);
   });
 
+  test('RC8-5 审批前发送失败不得把 sender 污染为 rootSessionId', () => {
+    const fx = makeFixture();
+    fx.service.create(SAMPLE_SPEC);
+    fx.service.submit('demo');
+    const first = fx.service.send(
+      'demo',
+      { from: 'lead', to: 'a', content: 'not started A' },
+      { id: 'agent-a' },
+    );
+    expect(first).toMatchObject({ outcome: 'error', code: 'NOT_STARTED' });
+    const second = fx.service.send(
+      'demo',
+      { from: 'lead', to: 'a', content: 'not started B' },
+      { id: 'agent-b' },
+    );
+    expect(second).toMatchObject({ outcome: 'error', code: 'NOT_STARTED' });
+    expect(fx.ledger.query({ kind: 'comm', action: 'admit' })).toHaveLength(0);
+    expect(fx.ledger.query({ kind: 'comm', action: 'deliver' })).toHaveLength(0);
+  });
+
   test('link 要求 running 且顶点存在；replay 接受非法 edge detail 不崩溃', async () => {
     const fx = makeFixture();
     fx.service.create(SAMPLE_SPEC);
