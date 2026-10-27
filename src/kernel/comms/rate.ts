@@ -21,11 +21,11 @@ export class RateLimiter {
    * 因而被丢弃的戳不可能改变今后任何 floor 的判定。空间上界为 n，
    * 不再随连续 degrade 的历史消息数增长。
    *
-   * 额外保留 `purgeFloor`：旧实现对 check(at) 的过期剔除不可逆，即使未来 at
-   * 回退，已被剔除的戳也不得复活。它是历史最大 floor，而非当前 at。
+   * 每次 check 都按“当前 floor”清理现存戳，而不是只在水位前进时清理：
+   *  · 历史 check 已删除的戳不在数组中，时钟回退不会让它们复活；
+   *  · 水位之后插入的旧戳，会在下一次窗口重新覆盖它时被正常清掉。
    */
   private stamps: number[] = [];
-  private purgeFloor = Number.NEGATIVE_INFINITY;
 
   constructor(limit: Rate, now: () => number = () => Date.now()) {
     this.limit = limit;
@@ -60,13 +60,11 @@ export class RateLimiter {
   check(at?: number): 'allow' | 'degrade' {
     const t = at ?? this.now();
     const floor = t - this.limit.perMs;
-    // check 的过期剔除不可逆；只提升水位，时钟回退不能复活已剔除的戳。
-    if (floor > this.purgeFloor) {
-      this.stamps = this.stamps.slice(this.firstAfter(floor));
-      this.purgeFloor = floor;
-    }
-    const valid = this.stamps.length - this.firstAfter(floor);
-    const verdict = valid < this.limit.n ? 'allow' : 'degrade';
+    // 只清理“当前仍在数组中”的过期戳。历史上已删除的戳不会复活；
+    // 这样即使 at 乱序回退，也不会把水位后插入的旧戳遗漏在窗口内。
+    const expired = this.firstAfter(floor);
+    if (expired > 0) this.stamps = this.stamps.slice(expired);
+    const verdict = this.stamps.length < this.limit.n ? 'allow' : 'degrade';
 
     // 二分插入，保持升序；只增一个元素，最多淘汰一个最小值。
     const insertAt = this.firstAtOrAfter(t);
@@ -85,6 +83,5 @@ export class RateLimiter {
   /** 清空窗口（人工复位）。 */
   reset(): void {
     this.stamps = [];
-    this.purgeFloor = Number.NEGATIVE_INFINITY;
   }
 }
