@@ -228,18 +228,25 @@ describe('kernel/topology/validate（语义校验，不 throw，空数组=通过
     expect(codes(c)).toContain('DEPENDENCY_CYCLE');
   });
 
-  it('TOO_MANY_VERTICES：超过默认上限 8（FR-2.6 计划期报错）；limits 可覆盖', () => {
-    const vertices = [
+  it('TOO_MANY_VERTICES：只统计会实际拉起的非 self 顶点（FR-2.6）；limits 可覆盖', () => {
+    const vertices = (spawned: number) => [
       { id: 'captain', origin: 'self' as const },
-      ...Array.from({ length: 8 }, (_, i) => ({
+      ...Array.from({ length: spawned }, (_, i) => ({
         id: `w-${i}`,
         parent: 'captain',
         layer: 1,
       })),
     ];
-    const c = parseConcourse({ id: 'x', tier: 'T1a', vertices });
-    expect(codes(c)).toContain('TOO_MANY_VERTICES');
-    expect(codes(c, { maxVertices: 16 })).not.toContain('TOO_MANY_VERTICES');
+    const atLimit = parseConcourse({ id: 'x', tier: 'T1a', vertices: vertices(8) });
+    expect(codes(atLimit)).not.toContain('TOO_MANY_VERTICES');
+    expect(codes(atLimit, { maxVertices: 16 })).not.toContain('TOO_MANY_VERTICES');
+
+    const overLimit = parseConcourse({ id: 'x', tier: 'T1a', vertices: vertices(9) });
+    expect(codes(overLimit)).toContain('TOO_MANY_VERTICES');
+    expect(codes(overLimit, { maxVertices: 16 })).not.toContain('TOO_MANY_VERTICES');
+    const issue = validateConcourse(overLimit).find((i) => i.code === 'TOO_MANY_VERTICES');
+    expect(issue?.message).toContain('派生子顶点数 9');
+    expect(issue?.message).toContain('上限 8');
   });
 
   it('BUDGET_OVERFLOW：顶点预算之和超过 concourse 预算', () => {
