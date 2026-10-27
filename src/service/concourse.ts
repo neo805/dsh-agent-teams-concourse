@@ -122,6 +122,15 @@ type MessageLike = {
   readonly source?: unknown;
 };
 
+/** 官方路径需要延后到下一轮的消息（由宿主接线层复制票据并重排）。 */
+export interface InboundDeferRequest<T extends MessageLike> {
+  readonly message: T;
+  readonly concourseId: string;
+  readonly admissionId: string;
+}
+
+export type InboundDeferrer<T extends MessageLike> = (request: InboundDeferRequest<T>) => void;
+
 export interface ConcourseServiceDeps {
   readonly substrate: Substrate;
   readonly ledger: Ledger;
@@ -464,8 +473,17 @@ export class ConcourseService {
    * 模型准入闸门：对真实 agent-message 按 durable senderSessionId 判定。
    * team_send 已提交的 admissionId 只消费票据；官方 send_message 等外部路径
    * 在此执行同一 open-edge 判定，闭边消息从本轮 messages 中移除并留痕。
+   *
+   * 官方路径的 wake=never / degrade 不能留在当前 pre-step：宿主在 sendMessage
+   * 时已经开启/继续了驱动器，只保留消息会让它与真实 wake 语义矛盾。此类消息
+   * 生成 admission 票据并交给 deferrer 重排到下一轮；成功后同一票据在后续
+   * pre-step 被消费，既不重复扣账，也不会被 dedup 误拒。
    */
-  filterInbound<T extends MessageLike>(targetAgentId: string, messages: readonly T[]): readonly T[] {
+  filterInbound<T extends MessageLike>(
+    targetAgentId: string,
+    messages: readonly T[],
+    defer?: InboundDeferrer<T>,
+  ): readonly T[] {
     // 同一领队可拥有多个 concourse：目标 root id 会重合，必须用唯一 sender
     // 反查所属 concourse；target 只用于构造候选集。
     const candidates = [...this.entries.values()].filter(
@@ -502,6 +520,52 @@ export class ConcourseService {
       const content = message.content.map((b) => b.text ?? '').join('');
       const msg: InboundMessage = { from, to, content };
       const plan = evaluateInbound(entry.runtime, msg);
+      if (plan.verdict === 'reject') {
+        commitInbound(entry.runtime, msg, plan, this.ledger);
+        continue;
+      }
+      const requiresDefer =
+        plan.verdict === 'degrade' || (plan.wake ?? 'never') === 'never';
+      if (requiresDefer) {
+        if (defer === undefined) {
+          throw new Error('官方路径需要不唤醒重排，但未提供 admission deferrer');
+        }
+        const nextAdmissionId = randomUUID();
+        this.ledger.append({
+          concourseId: entry.concourse.id,
+          kind: 'comm',
+          action: 'admit',
+          detail: {
+            from,
+            to,
+            tokens: plan.tokens,
+            admissionId: nextAdmissionId,
+            deferred: true,
+          },
+        });
+        try {
+          defer({ message, concourseId: entry.concourse.id, admissionId: nextAdmissionId });
+        } catch (err) {
+          this.safeAppend({
+            concourseId: entry.concourse.id,
+            kind: 'comm',
+            action: 'delivery-failed',
+            detail: {
+              from,
+              to,
+              admissionId: nextAdmissionId,
+              code: errorCode(err),
+              message: errorMessage(err),
+            },
+          });
+          continue;
+        }
+        const out = commitInbound(entry.runtime, msg, plan, this.ledger);
+        if (out.kind === 'deliver' || out.kind === 'degrade') {
+          entry.runtime.admissions.set(nextAdmissionId, out.kind);
+        }
+        continue;
+      }
       const out = commitInbound(entry.runtime, msg, plan, this.ledger);
       if (out.kind !== 'reject') kept.push(message);
     }

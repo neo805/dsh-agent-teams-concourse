@@ -145,12 +145,35 @@ export async function apply(ctx: unknown, config: ConcourseConfig = {}): Promise
         [key: string]: unknown;
       };
       if (decision.kind === 'reject') return decision;
-      const p = payload as { agent?: { id?: unknown } };
+      const p = payload as {
+        agent?: {
+          id?: unknown;
+          inbox?: { append?(target: 'next-turn', message: unknown): void };
+        };
+      };
       const agentId = p.agent?.id;
       const messages = decision.messages ?? [];
       if (typeof agentId !== 'string' || messages.length === 0) return decision;
       try {
-        const filtered = service.filterInbound(agentId, messages);
+        const filtered = service.filterInbound(agentId, messages, (request) => {
+          const inbox = p.agent?.inbox;
+          const append = inbox?.append;
+          if (inbox === undefined || typeof append !== 'function') {
+            throw new Error('宿主 Agent.inbox.append 缺席，无法重排不唤醒消息');
+          }
+          const source = request.message.source;
+          if (typeof source !== 'object' || source === null) {
+            throw new Error('agent-message 缺少可扩展 source');
+          }
+          const cloned = {
+            ...request.message,
+            source: {
+              ...(source as Record<string, unknown>),
+              concourse: { id: request.concourseId, admissionId: request.admissionId },
+            },
+          };
+          append.call(inbox, 'next-turn', cloned);
+        });
         if (filtered.length === messages.length) return decision;
         if (filtered.length === 0) return { kind: 'reject' as const };
         return { ...decision, messages: filtered };
