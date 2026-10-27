@@ -30,7 +30,7 @@
 | **H2.5** | **通信/路由/UI 身份正确性与工程门禁加固** | `0.2.1-rc.5` | ✅ 出品人验收通过 | 448 测试 + pack/plugin 自查 + Web/Desktop 实机验收 |
 | **H2.6 / H3.0** | **硬化出口：协议先行 + 不变量测试 + 限流/契约收口** | `0.2.1-rc.6` | 🟨 代码/单测/全门禁/Web 实机完成；Desktop 已装 disabled，待出品人验收 | H3 ADR + 模型/对拍测试 + RateLimiter 有界化 + 全验证阶梯 |
 | **H2.7 / RC7** | **通信语义断点修复：wake / 全局唤醒预算 / 运行期自环** | `0.2.1-rc.7` | 🟨 代码/单测/全门禁/Web 实机完成；Desktop 已装 disabled，待出品人验收 | 468 测试 + wake/账域/replay 不变量 + Web/Desktop 阶梯 |
-| **H2.8 / RC8** | **审查后实证修复：官方路径 wake 闭环 + 限流/容量/身份/留痕** | `0.2.1-rc.8` | 🟨 代码/单测/全门禁完成；Web/Desktop 阶梯待执行 | 480 测试 + 官方两轮票据 + 乱序对拍 + 完整阶梯 |
+| **H2.8 / RC8** | **审查后实证修复：官方路径 wake 闭环 + 限流/容量/身份/留痕** | `0.2.1-rc.8` | 🟨 代码/单测/全门禁/Web 实机完成；Desktop 已装 disabled，待出品人验收 | 480 测试 + 官方两轮票据 + 乱序对拍 + 完整阶梯 |
 | **P5** | **旁路探针 MVP**（隔离 / 摘要 / 句柄 / 回注档） | `0.3.0-rc.1`？ | ⬜ 待 H2.6 与版本批准 | AC-1 / AC-2 / AC-3；不另建事务路径 |
 | **H3.1** | **事务/恢复实现与故障注入** | `0.3.x-rc.N` | ⬜ 待 P5 | 崩溃窗口对账 + live/replay 等价 + torn-tail 策略 |
 | **P6** | **探针生命周期**（七状态 / 四级丢弃 / 遮蔽 / 晋升） | `0.3.x-rc.N` | ⬜ 待 H3.1 | AC-4 / AC-5 |
@@ -174,11 +174,16 @@ P0──P1──P2──P3──P4──[0.1.0 MVP]──[0.2.0 运行时适配]
 
 **明确不进入 RC8**：Catalog 并发与裸 model 多 provider 歧义、AgentDirectory、suggest/validate/UI 线性化、测试专用导出清理、BMP emoji 门禁扩展、H3.1 恢复/重启票据恢复。
 
-**验证记录（施工中，Web/Desktop 待补）**：
+**验证记录**：
 
-- 红灯：RC8-1 6 failed、RC8-2 3 failed、RC8-3 1 failed、RC8-4 1 failed、RC8-5 2 failed；对应测试提交在实现前独立落盘。
+- 红灯：RC8-1 6 failed、RC8-2 3 failed、RC8-3 1 failed、RC8-4 1 failed、RC8-5 2 failed；对应测试提交在实现前独立落盘，历史按 test/fix 成对保留。
 - `pnpm verify`：**60 文件 / 480 测试全绿**；coverage statements/lines `98.26%`、branches `90.72%`、functions `99.09%`；typecheck/lint/boundaries/assets/pack-smoke 通过。
-- rc.8 新增回归覆盖官方 never/board/degrade 两轮、FIFO/混合批/requeue 失败、RateLimiter 乱序穷举、self+8/self+9、缺 sender、异时钟 createdAt 与失败发送身份。
+- 标准 tarball：17 文件，SHA-256 `E32189A9F3694F6D0928CB95AFF2146233B6C75296087A4D6954C6D95F177866`。
+- Web profile：rc.8 安装 17/17 文件哈希一致；`--dump-config` 退出 0、concourse 行启用；裸 import 返回 `apply/inject` 正常；`plugin_check --profile web` 未见 concourse 打包问题（仅既有 `dsh-excel-chat` 条目）。
+- Web 实机（lead `session-fe2d2f94-a383-42cf-bee7-a52a7c9906fe`，worker `69711f76-f6ff-4e5c-8595-2f0a4816112c`）：`team_plan → team_assign` 成功，worker 完成首任务并 idle。官方 `send_message` 发 `OFFICIAL_NEVER_MARKER_9137` 到 never 边后，worker 的 turn 2 以 `blocked` 结束、无 `request/header`；台账 seq 64–66 为唯一 deferred admit + deliver。随后 `team_link` 开 on-reply 边（seq 67）并 `team_send`（seq 68–70）显式唤醒；worker turn 3 才进入模型并看到官方标记，turn 4 看到 trigger；官方标记只出现一次，未见重复 admission 或扣账。rc8 台账共 20 条事件。
+- 限制：Web 测试只覆盖本轮官方路径两轮与工具链；H3.1 的 commit 失败/重启票据恢复仍不在此证据范围。
+- Desktop：rc.8 安装 17/17 文件哈希一致；loader entry `include:concourse` 为 `inactive`，patch 行 `disabled: true` 保持；`plugin_check --profile desktop` 未见 concourse 问题（仅既有 `dsh-excel-chat` 条目）。未重启 Desktop，视觉/功能验收留给出品人。
+- 未执行：push / tag / 建仓。以上结果均为本地证据。
 
 ---
 
