@@ -498,7 +498,18 @@ export class ConcourseService {
         continue;
       }
       const senderId = (source as { senderSessionId?: unknown }).senderSessionId;
-      if (typeof senderId !== 'string') continue;
+      if (typeof senderId !== 'string') {
+        const fallback = candidates[0]!;
+        const targetVertex = this.vertexOfAgent(fallback, targetAgentId)!;
+        commitReject(
+          fallback.runtime,
+          { from: '<missing-sender>', to: targetVertex, content: '' },
+          'UNKNOWN_VERTEX',
+          undefined,
+          this.ledger,
+        );
+        continue;
+      }
       const entry = candidates.find((candidate) => this.vertexOfAgent(candidate, senderId) !== undefined);
       if (entry === undefined) {
         const fallback = candidates[0]!;
