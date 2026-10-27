@@ -48,7 +48,7 @@ const SUMMARY_SCHEMA = {
 export function createTeamStatusTool(deps: TeamToolsDeps) {
   return defineTool({
     name: 'team_status',
-    description: `查询 concourse 状态：不带 id 返回全部实例概要列表；带 id 返回单实例详情（顶点、开放边 x/y、预算余量、回声计数、熔断状态）。${BOUNDARY_NOTE}`,
+    description: `查询 concourse 状态：不带 id 返回全部实例概要列表；带 id 返回单实例详情（顶点、开放边 x/y、主动唤醒预算余量、回声计数、全局主动唤醒熔断；never/board 仍受边约束）。${BOUNDARY_NOTE}`,
     parameters: {
       id: { type: 'string', description: 'concourse id（缺省返回列表）' },
     },
@@ -117,7 +117,7 @@ export function createTeamStatusTool(deps: TeamToolsDeps) {
           const lines = [
             `concourse「${d.id}」 ${d.tierLabel} · ${d.status}`,
             `顶点 ${d.vertices.length} · 开放边 ${d.edges.length}`,
-            `预算余量：${d.budgetRemaining === null ? '（未设）' : `${d.budgetRemaining} tokens`} · 全局熔断：${d.globalFused ? '是' : '否'}`,
+            `主动唤醒预算余量：${d.budgetRemaining === null ? '（未设）' : `${d.budgetRemaining} tokens`} · 全局主动唤醒熔断：${d.globalFused ? '是' : '否'}`,
           ];
           if (d.fusedEdges.length > 0) lines.push(`熔断边：${d.fusedEdges.join('、')}`);
           return [{ type: 'text' as const, text: lines.join('\n') }];

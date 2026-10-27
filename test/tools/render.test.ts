@@ -117,7 +117,7 @@ describe('team_* render 分支', () => {
           fusedEdges: [],
         },
       }),
-    ).toContain('全局熔断：是');
+    ).toContain('全局主动唤醒熔断：是');
     expect(textOf(tool, { ok: false, count: 0, concourses: [] })).toContain('?');
   });
 

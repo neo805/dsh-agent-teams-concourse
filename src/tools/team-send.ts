@@ -14,7 +14,7 @@ import { BOUNDARY_NOTE, type TeamToolsDeps } from './deps.js';
 export function createTeamSendTool(deps: TeamToolsDeps) {
   return defineTool({
     name: 'team_send',
-    description: `向 concourse 顶点发送消息：先经收件箱准入权威判定（闸门/跳数/去重/速率/预算），deliver 才投递；拒绝（EDGE_CLOSED/HOP_LIMIT/DUPLICATE/FUSE_*）与降级（RATE_LIMIT）原样返回并留痕，绝不旁路。${BOUNDARY_NOTE}`,
+    description: `向 concourse 顶点发送消息：先经收件箱准入权威判定（闸门/跳数/去重/速率/预算）。仅 deliver/degrade 真实写入目标 inbox，degrade 不唤醒目标；reject 不投递。拒绝（EDGE_CLOSED/HOP_LIMIT/DUPLICATE/FUSE_*）与降级（RATE_LIMIT）原样返回并留痕，绝不旁路。${BOUNDARY_NOTE}`,
     parameters: {
       id: { type: 'string', required: true, description: 'concourse id' },
       from: { type: 'string', required: true, description: '发送方顶点 id' },

@@ -1,5 +1,5 @@
 /**
- * test/tools/team-send — 消息发送工具：admitInbound 权威判定在前，deliver 才投递。
+ * test/tools/team-send — 消息发送工具：admitInbound 权威判定在前，仅 deliver/degrade 真实投递。
  */
 import { describe, expect, test } from 'vitest';
 import { createTeamSendTool } from '../../src/tools/team-send.js';
@@ -106,7 +106,7 @@ describe('team_send', () => {
     expect(fx.substrate.deliveries[0]?.senderId).toBe('child-a');
   });
 
-  test('degrade：窗口内第 n+1 条原样返回 RATE_LIMIT（不投递不拒绝）', async () => {
+  test('degrade：窗口内第 n+1 条原样返回 RATE_LIMIT（真实投递但不唤醒）', async () => {
     const fx = makeFixture();
     const spec = {
       ...SAMPLE_SPEC,

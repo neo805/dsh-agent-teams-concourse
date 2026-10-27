@@ -83,7 +83,7 @@ machine-specific information.
 
 ## 2. 版本号治理
 
-版本号形如 `X.X.X-rc.X`。**本项目当前版本 `0.2.1-rc.7`**；**所有新版本号一律带
+版本号形如 `X.X.X-rc.X`。**本项目当前版本 `0.2.1-rc.8`**；**所有新版本号一律带
 `rc` 后缀**（`package.json`、`CHANGELOG.md` 标题、README 首屏、git tag 一律一致）。
 下一版本候选：`0.3.0-rc.1`（探针功能，需出品人批准第二位）。
 
@@ -121,7 +121,7 @@ machine-specific information.
 - **覆盖率阈值是全局 90%**（lines / branches / functions / statements）。
   设计上的按层阈值（kernel ≥90 / service ≥80 / host ≥70 / client ≥60）尚未在
   `vitest.config.ts` 启用，列为技术债 T-9。
-- 报告里给出通过数与覆盖率；**测试基线 60 文件 / 468 测试**（2026-10-27 rc.7 实测），
+- 报告里给出通过数与覆盖率；**测试基线 60 文件 / 480 测试**（2026-10-27 rc.8 实测），
   数字变化时同步更新到本文件 §8 与开发计划，不让它变成过时数字。
 - 纯文档、纯配置变更可豁免测试先行，但必须在交付报告里写明豁免理由。
 - 覆盖率不是目标：**不为凑数字写造作测试**。不可达的防御分支允许留空，但要在报告里点名。
@@ -193,7 +193,7 @@ machine-specific information.
 
 - 关于状态的任何结论都要有**可复核的证据**，而不是记忆或推断：
   - 仓库状态 → 实际跑 `git log` / `git status`；
-  - 功能可用 → `pnpm test` 实际通过数（当前基线 **60 文件 / 468 测试**）；
+  - 功能可用 → `pnpm test` 实际通过数（当前基线 **60 文件 / 480 测试**）；
   - 安装成功 → **构建产物与已安装文件的哈希逐一比对**，而不是"拷过去了"；
   - 接线生效 → `dsh --profile <name> --dump-config` 实际输出 + 裸 import 预检；
   - 通信闸门生效 → 台账里**新增的事件条目**（reject / degrade / deliver）。
@@ -220,7 +220,7 @@ machine-specific information.
    安装检查，**必须通过**。依赖声明没动时跳过本步。
 2. `pnpm verify` —— build / typecheck / lint / 边界 / 零资产 / 覆盖率 / pack-smoke 全绿。
    `dist/` 与 `coverage/` 已 gitignore：**构建产物不入库**，但装包前必须重建。
-3. `pnpm test` 单独记下通过数（当前 **468/468**，60 文件）与新增测试清单（§3）。
+3. `pnpm test` 单独记下通过数（当前 **480/480**，60 文件）与新增测试清单（§3）。
 4. 按 §2 调整版本号；同步 `CHANGELOG.md` 与 README 首屏（中英双版）。
 5. `plugin_check` 自查打包元数据（§13），并明确它只是必要非充分。
 6. `pnpm pack` —— 出 tarball。

@@ -1,5 +1,5 @@
 /**
- * test/tools/team-status — 状态查询工具：列表/详情（开放边 x/y、预算余量、回声计数、熔断）。
+ * test/tools/team-status — 状态查询工具：列表/详情（开放边 x/y、主动唤醒预算余量、回声计数、熔断）。
  */
 import { describe, expect, test } from 'vitest';
 import { createTeamSendTool } from '../../src/tools/team-send.js';
@@ -67,7 +67,7 @@ describe('team_status', () => {
     });
   });
 
-  test('详情：顶点/边/预算余量/回声/熔断字段', async () => {
+  test('详情：顶点/边/主动唤醒预算余量/回声/熔断字段', async () => {
     const fx = makeFixture();
     await makeRunning(fx);
     const tool = createTeamStatusTool(fx.deps);

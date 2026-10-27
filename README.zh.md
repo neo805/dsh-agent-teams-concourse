@@ -2,7 +2,7 @@
 
 [English](README.md) | 中文
 
-**版本：** `0.2.1-rc.7`（DSH 基线 `0.2.1-rc.2`；wake/全局唤醒预算正确性、运行期自环防护、H3.0 协议与限流窗口有界化；待出品人验收）· [变更日志](CHANGELOG.md) · [需求文档](docs/REQUIREMENTS.html) · [开发计划](DEVELOPMENT_PLAN.md) · [协作规范](COLLABORATION.md)
+**版本：** `0.2.1-rc.8`（DSH 基线 `0.2.1-rc.2`；官方路径 wake 闭环、限流乱序修复、容量/身份/留痕确定性收口；待出品人验收）· [变更日志](CHANGELOG.md) · [需求文档](docs/REQUIREMENTS.html) · [开发计划](DEVELOPMENT_PLAN.md) · [协作规范](COLLABORATION.md)
 
 DSH 的**组织层**插件：把「谁和谁能通信、每个执行单元用什么模型与思考强度、产出如何回到主线」
 变成可编辑的一等数据。拓扑不是搭出来的，是**剪**出来的——底座在物理上已是完全图，本插件在其上
@@ -43,7 +43,12 @@ child 应答）已通过；Desktop 已安装但保持 `disabled`，待出品人�
 `hops`/`correlationId` 链元数据仍是 H3.1 债务，修复前不宣称硬 TTL 或完整请求应答绑定。
 rc.7 全门禁通过（60 文件 / 468 测试）；Web profile 已验证正常投递、全局熔断账域分离与
 自环拒绝，空闲 child 仍受既有 `TARGET_UNAVAILABLE` 限制。Desktop 已安装 rc.7 并保持
-`disabled`，待出品人验收。
+`disabled`，待出品人验收。`0.2.1-rc.8` 收口审查发现的实证问题：官方/裸 `sendMessage`
+的 never/board/degrade 现在先带票据重排到 `next-turn`，不再进入被唤醒的当前轮次；
+限流器修复乱序时间戳虚假 degrade；容量校验不再把 self 领队计入子代理上限；缺失发送者
+会留拒绝痕；`createdAt` 与领队身份绑定改为确定性/无失败副作用。rc.8 测试基线为
+**60 文件 / 480 测试**。重排成功后写盘失败仍属 #15，重启票据恢复仍属 #16，本轮不宣称
+exactly-once 或完整崩溃恢复。
 
 ## 前置条件
 
@@ -60,7 +65,7 @@ pnpm verify
 pnpm pack
 
 # 2) 装进某个 profile，然后**完全重启**宿主（宿主插件只在启动时加载）
-dsh plugin --profile <profile> add <path-to>\dsh-agent-teams-concourse-0.2.1-rc.5.tgz
+dsh plugin --profile <profile> add <path-to>\dsh-agent-teams-concourse-<version>.tgz
 ```
 
 在该 profile 的 `cordis.patch.yml` 里打开它（缺省惰性）：

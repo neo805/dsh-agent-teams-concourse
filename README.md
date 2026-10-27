@@ -2,7 +2,7 @@
 
 English | [中文](README.zh.md)
 
-**Version:** `0.2.1-rc.7` (DSH baseline `0.2.1-rc.2`; wake/global wake-budget correctness, runtime self-loop guard, H3.0 protocol and bounded rate limiting; producer acceptance pending) · [Changelog](CHANGELOG.md) · [Requirements](docs/REQUIREMENTS.html) · [Plan](DEVELOPMENT_PLAN.md) · [Collaboration norms](COLLABORATION.md)
+**Version:** `0.2.1-rc.8` (DSH baseline `0.2.1-rc.2`; official-path wake closure, out-of-order rate-limit fix, capacity/identity/trace determinism; producer acceptance pending) · [Changelog](CHANGELOG.md) · [Requirements](docs/REQUIREMENTS.html) · [Plan](DEVELOPMENT_PLAN.md) · [Collaboration norms](COLLABORATION.md)
 
 The **organizational layer** for DSH: it turns "who may talk to whom, which model and
 reasoning effort each execution unit gets, and how a product finds its way back to the
@@ -55,7 +55,14 @@ they reach the ledger. Hops/correlation chain metadata remain an H3.1 debt and a
 claimed as a hard TTL or request-reply guarantee. RC7's full gate passed (60 files / 468
 tests); its Web profile verified normal delivery, the global-fuse split and self-loop
 rejection, while an idle child still hits the known `TARGET_UNAVAILABLE` limit. Desktop is
-installed as rc.7 and kept `disabled` pending producer acceptance.
+installed as rc.7 and kept `disabled` pending producer acceptance. `0.2.1-rc.8` closes the
+audit findings: official/bare `sendMessage` now requeues never/board/degrade behind an
+admission ticket onto `next-turn` instead of admitting them into the wake-triggered current
+turn; the rate limiter no longer produces false degrade on out-of-order timestamps; capacity
+checks exclude the self leader; missing senders leave a rejection trace; `createdAt` and
+leader identity binding are deterministic and free of failed-send side effects. RC8's test
+baseline is **60 files / 480 tests**. Post-requeue write failure remains #15 and restart
+ticket recovery remains #16, so RC8 does not claim exactly-once or full crash recovery.
 
 ## Requirements
 
@@ -74,7 +81,7 @@ pnpm verify
 pnpm pack
 
 # 2) install into a profile, then **fully restart** the host (host plugins load at startup only)
-dsh plugin --profile <profile> add <path-to>\dsh-agent-teams-concourse-0.2.1-rc.5.tgz
+dsh plugin --profile <profile> add <path-to>\dsh-agent-teams-concourse-<version>.tgz
 ```
 
 Enable it in that profile's `cordis.patch.yml` (lazy by default):

@@ -3,8 +3,8 @@
 |  |  |
 | --- | --- |
 | 日期 | 2026-10-27 |
-| 版本 | `0.2.1-rc.7` 协议基线（rc.7 预算账域勘误）；实现目标 `0.3.x-rc.N`（H3.1） |
-| 状态 | H3.0 施工稿 + rc.7 账域勘误；rc.7 代码/单测/Web 实机完成，Desktop 已装 disabled，待出品人验收；H3.1 实现前不得宣称更强保证 |
+| 版本 | `0.2.1-rc.8` 协议基线（rc.7 预算账域勘误 + rc.8 官方路径 deferral）；实现目标 `0.3.x-rc.N`（H3.1） |
+| 状态 | H3.0 施工稿 + rc.7 账域勘误 + rc.8 deferral 说明；rc.8 代码/单测/全门禁完成后走 Web/Desktop 验收；H3.1 实现前不得宣称更强保证 |
 | 范围 | 单 DSH 进程、插件自建组织层；不跨进程、不跨 DSH 实例 |
 | 依据 | 需求 §4.5 / NFR-4 / FR-C9；`D-0.2.1-rc.3-hardening.md`；第 4–7 期第三方全景审计 |
 
@@ -52,6 +52,8 @@ evaluateInbound（只读预检）
 - `target.send` 抛错：追加 `comm.delivery-failed` 并释放预留；返回真实错误。
 - 发布回执写入失败：**必须**向调用方返回 `PUBLICATION_UNKNOWN`（消息可能已被宿主受理），不得返回 deliver。
 - 同一 `admissionId` 的回执只能出现一次；重复回执按协议损坏处理并告警，不双扣。
+
+**rc.8 官方路径 deferral**：官方/裸 `subagents.sendMessage` 已先行触发目标驱动器，随后才进入 `agent/pre-step`。对 `plan.verdict === 'degrade'` 或 `deliver && wake === 'never'` 的消息，插件生成 `admissionId`、写 `comm.admit`，把带 `source.concourse` 票据的克隆排入目标 `next-turn`，当前决策排除原文；requeue 成功后才 commit 并登记 admission。requeue 失败写 `comm.delivery-failed`，不 commit、不扣预算、不登记票据。本路径不新增事务协议：requeue 成功后的 commit/写盘失败仍是 #15，重启后 parked 票据仍是 #16，H3.1 前不宣称 exactly-once。
 
 ### 3.2 崩溃窗口
 

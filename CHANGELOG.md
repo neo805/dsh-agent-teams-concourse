@@ -3,6 +3,34 @@
 本项目遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/) 与
 [语义化版本](https://semver.org/lang/zh-CN/)。版本变更须在此登记。
 
+## [0.2.1-rc.8] — 2026-10-27 · 审查后实证修复
+
+### Added
+
+- 官方/裸 `subagents.sendMessage` 路径的 `wake=never`、board 与 RATE_LIMIT degrade 统一改为“生成 admission 票据 → 重排 `next-turn` → 后续自然步点消费”；原始消息不再进入被唤醒的当前模型轮次，且票据只消费一次。
+- 限流器新增最小乱序反例、`> → >=` 误修反例与确定性有界穷举对拍；容量校验新增 self+8 / self+9 边界；创建时刻与失败发送身份新增异时钟/副作用回归。
+
+### Changed
+
+- `team_send` / `team_status` 的工具描述和状态文案明确：deliver 与 degrade 都真实投递，degrade 不唤醒；全局额度是主动唤醒预算，never/board 仍受边约束。
+- 测试基线更新为 **60 文件 / 480 测试**。
+- 版本统一为 `0.2.1-rc.8`；README 双语、开发计划与协作基线同步本轮事实。
+
+### Fixed
+
+- rc.7 的 wake 修复只覆盖 `team_send → substrate`，官方/裸 `sendMessage` 仍可让 never/board/degrade 进入当前模型轮次（FR-C4/C5/C6）。
+- 有界 `RateLimiter` 在乱序时间戳下保留水位后插入的旧戳，可能产生虚假 degrade；删除 `purgeFloor`，每次 `check` 按当前 floor 清理。
+- 容量校验误把 self 领队计入 `maxActiveSubagents`，导致 1 self + 8 spawned 的合法计划被拒。
+- 缺 `senderSessionId` 的 agent-message 被静默移除而没有 `comm.reject` 留痕；现复用 `UNKNOWN_VERTEX`。
+- `createdAt` 在 create 事件与 service 各读一次时钟，live/replay 可能漂移；现只使用 create 事件时刻。
+- 审批前发送失败会提前写入 `rootSessionId`，污染后续调用身份；现只在 deliver/degrade 提交成功后绑定。
+
+### Known limits
+
+- 重排成功后 commit/写盘失败仍属已知残留 #15；重启后 parked 票据与 admission 不恢复仍属 #16。本轮不宣称 exactly-once 或完整崩溃恢复。
+- Catalog 串行、AgentDirectory、suggest/validate/UI 线性化与测试夹具清理仍按 P7/P8/P9 排期；没有新基准证明应提前。
+- `./client` 空 dts、BMP emoji 门禁漏报与旧 `_mount-concourse.cjs` 留档继续登记，不在本轮夹带。
+
 ## [0.2.1-rc.7] — 2026-10-27 · 通信语义断点修复
 
 ### Added

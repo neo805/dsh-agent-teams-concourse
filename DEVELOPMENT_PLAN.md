@@ -2,12 +2,12 @@
 
 |  |  |
 | --- | --- |
-| 计划版本 | **v2.6**（2026-10-27）· 取代 v2.5（2026-10-25） |
+| 计划版本 | **v2.7**（2026-10-27）· 取代 v2.6（2026-10-27） |
 | 需求依据 | `docs/REQUIREMENTS.html` v2.0（唯一需求依据） |
 | 协作规范 | `COLLABORATION.md` v2.0（角色、版本、验证阶梯、交付清单） |
 | 输入 | 两份调研底稿（`docs/*-report.html`）· 13 份 research 底稿 · P0–P4 开发会话与真机测试记录 · 第 4–7 期第三方全景审计（2026-10-25） |
-| 当前版本 | `0.2.1-rc.7`（0.1.0 = MVP 出口；0.2.0 = 运行时适配 + 真机 6 问题修复；0.2.1-rc.2 = T0–T4 可信性修复；rc.3 = 契约/通信/回放一致性硬化；rc.4 = 侧栏可发现性与自动打开；rc.5 = 通信/路由/UI 身份正确性与工程门禁加固；rc.6 = 硬化出口 + H3.0 协议；rc.7 = wake/全局唤醒预算/自环语义修复） |
-| 基线环境 | DSH `0.2.1-rc.2` · Node `^22.19 || >=24` · pnpm 11.7 · 测试 **60 文件 / 468 测试** |
+| 当前版本 | `0.2.1-rc.8`（0.1.0 = MVP 出口；0.2.0 = 运行时适配 + 真机 6 问题修复；0.2.1-rc.2 = T0–T4 可信性修复；rc.3 = 契约/通信/回放一致性硬化；rc.4 = 侧栏可发现性与自动打开；rc.5 = 通信/路由/UI 身份正确性与工程门禁加固；rc.6 = 硬化出口 + H3.0 协议；rc.7 = wake/全局唤醒预算/自环语义修复；rc.8 = 官方路径 wake 闭环 + 审查后实证修复） |
+| 基线环境 | DSH `0.2.1-rc.2` · Node `^22.19 || >=24` · pnpm 11.7 · 测试 **60 文件 / 480 测试** |
 | 目标仓库 | `neo805/dsh-agent-teams-concourse`（Public + MIT，**尚未建仓；建仓与首推须出品人批准**） |
 
 ---
@@ -30,6 +30,7 @@
 | **H2.5** | **通信/路由/UI 身份正确性与工程门禁加固** | `0.2.1-rc.5` | ✅ 出品人验收通过 | 448 测试 + pack/plugin 自查 + Web/Desktop 实机验收 |
 | **H2.6 / H3.0** | **硬化出口：协议先行 + 不变量测试 + 限流/契约收口** | `0.2.1-rc.6` | 🟨 代码/单测/全门禁/Web 实机完成；Desktop 已装 disabled，待出品人验收 | H3 ADR + 模型/对拍测试 + RateLimiter 有界化 + 全验证阶梯 |
 | **H2.7 / RC7** | **通信语义断点修复：wake / 全局唤醒预算 / 运行期自环** | `0.2.1-rc.7` | 🟨 代码/单测/全门禁/Web 实机完成；Desktop 已装 disabled，待出品人验收 | 468 测试 + wake/账域/replay 不变量 + Web/Desktop 阶梯 |
+| **H2.8 / RC8** | **审查后实证修复：官方路径 wake 闭环 + 限流/容量/身份/留痕** | `0.2.1-rc.8` | 🟨 代码/单测/全门禁完成；Web/Desktop 阶梯待执行 | 480 测试 + 官方两轮票据 + 乱序对拍 + 完整阶梯 |
 | **P5** | **旁路探针 MVP**（隔离 / 摘要 / 句柄 / 回注档） | `0.3.0-rc.1`？ | ⬜ 待 H2.6 与版本批准 | AC-1 / AC-2 / AC-3；不另建事务路径 |
 | **H3.1** | **事务/恢复实现与故障注入** | `0.3.x-rc.N` | ⬜ 待 P5 | 崩溃窗口对账 + live/replay 等价 + torn-tail 策略 |
 | **P6** | **探针生命周期**（七状态 / 四级丢弃 / 遮蔽 / 晋升） | `0.3.x-rc.N` | ⬜ 待 H3.1 | AC-4 / AC-5 |
@@ -48,6 +49,12 @@
 3. **P5 仍是下一项功能主线。** 它在 T0 即可成立、实现面小且平台可行性已证实；rc.7 验收并取得第二位版本号批准后进入。TTL/correlation 的可信链元数据缺口登记为 H3.1，不在 P5 前另造第二套协议。
 4. **不把预期失败测试当作债务停车场。** 当前承诺行为必须有真实全绿测试；尚未实现的 H3.1 场景先写在 ADR 与残留表，不能以 xfail 冒充交付或弱化 `verify` 的出口含义。
 
+### 0.2 为什么 rc.7 后先做 rc.8，而不是直接进入 P5
+
+rc.7 完成后的常规代码审查发现三类实证问题：官方/裸 `sendMessage` 仍绕过 wake/degrade 的不唤醒语义；rc.6 有界 `RateLimiter` 在乱序时间戳下与旧参考发散；容量、身份与留痕存在局部缺陷。它们都不是新功能，也不属于已登记的 H3.1 恢复实现，因此先以 `0.2.1-rc.8` 做窄修复，再看 P5。
+
+rc.8 **不**提前 Catalog 并发、AgentDirectory、suggest/validate/UI 线性化、测试夹具合并或发布物裁剪；这些仍等待基准、P7/P8 或 P9。也不把“重排成功后写盘失败”“重启票据恢复”包装成本轮已解决：二者继续归 #15/#16。
+
 ---
 
 ## 1 · 阶段路线总览
@@ -55,10 +62,10 @@
 ```
 P0──P1──P2──P3──P4──[0.1.0 MVP]──[0.2.0 运行时适配]
                                         │
-                              H1──H2──H2.5──H2.6 / H3.0──H2.7 / RC7
-                                                              │
-                                                              ▼
-                                                       P5 探针 MVP
+                              H1──H2──H2.5──H2.6 / H3.0──H2.7 / RC7──H2.8 / RC8
+                                                                        │
+                                                                        ▼
+                                                                 P5 探针 MVP
                                               │
                                               ▼
                                    H3.1 事务/恢复实现
@@ -150,11 +157,36 @@ P0──P1──P2──P3──P4──[0.1.0 MVP]──[0.2.0 运行时适配]
 
 ---
 
+### H2.8 / RC8 · 审查后实证修复
+
+**目标**：修复 rc.7 审查确认的官方路径 wake 断点、RateLimiter 乱序回归、self 容量误计、缺失发送者无留痕、创建时刻双读与失败发送身份副作用；不增加新功能，不提前 P7/P9 优化。
+
+**施工 todo**：
+
+| ID | 技术路线 | 验收目标 |
+| --- | --- | --- |
+| **RC8-1** | 官方/裸 `agent-message` 在 never/board/degrade 时生成 admission，克隆消息带 `source.concourse` 重排 `next-turn`；当前 pre-step 排除原文，requeue 成功后才 commit/admissions。 | 首次唤醒不进入模型请求；后续票据只消费一次；FIFO/混合批/requeue 失败覆盖；team_send 不回归。 |
+| **RC8-2** | 删除 `RateLimiter.purgeFloor`；每次 check 都按当前 floor 清理现存 stamps，再做判定、插入与 largest-n 截断。 | 最小反例、`>=` 误修反例、短序列穷举与旧参考全等；窗口 ≤n。 |
+| **RC8-3** | 容量只统计 `origin !== 'self'` 的顶点。 | self+8 spawned 通过、self+9 拒绝；自定义上限一致。 |
+| **RC8-4** | 缺/非法 senderSessionId 仍移除消息，但写 `UNKNOWN_VERTEX` reject。 | reject=1、deliver/budget/admission 均为 0；其他路径不回归。 |
+| **RC8-5** | `createdAt` 取 create 事件 `at`；审批前 self 识别用临时值，成功 commit 后才落 `rootSessionId`。 | 异时钟 live/replay 一致；失败发送不污染后续身份。 |
+| **RC8-6** | 同步工具描述、文档、版本与验证阶梯；登记本轮不施工项。 | 480 测试、全门禁、pack/plugin_check、Web 实机与 Desktop disabled。 |
+
+**明确不进入 RC8**：Catalog 并发与裸 model 多 provider 歧义、AgentDirectory、suggest/validate/UI 线性化、测试专用导出清理、BMP emoji 门禁扩展、H3.1 恢复/重启票据恢复。
+
+**验证记录（施工中，Web/Desktop 待补）**：
+
+- 红灯：RC8-1 6 failed、RC8-2 3 failed、RC8-3 1 failed、RC8-4 1 failed、RC8-5 2 failed；对应测试提交在实现前独立落盘。
+- `pnpm verify`：**60 文件 / 480 测试全绿**；coverage statements/lines `98.26%`、branches `90.72%`、functions `99.09%`；typecheck/lint/boundaries/assets/pack-smoke 通过。
+- rc.8 新增回归覆盖官方 never/board/degrade 两轮、FIFO/混合批/requeue 失败、RateLimiter 乱序穷举、self+8/self+9、缺 sender、异时钟 createdAt 与失败发送身份。
+
+---
+
 ### P5 · 旁路探针 MVP
 
 **目标**：AC-1（零污染）、AC-2（摘要默认不进上下文）、AC-3（模型可按句柄取回）三条判据可验收。
 
-**前置约束**：H2.7 / rc.7 已验收，且出品人已批准第二位版本号。探针事件与句柄存储必须遵守 H3.0 ADR；不得另建投递/恢复协议，不得在 H3.1 前宣称 exactly-once 或完整崩溃恢复。P5 不新增多跳转发依赖；TTL/correlation 在 H3.1 前不构成硬保证。
+**前置约束**：H2.8 / rc.8 已验收，且出品人已批准第二位版本号。探针事件与句柄存储必须遵守 H3.0 ADR；不得另建投递/恢复协议，不得在 H3.1 前宣称 exactly-once 或完整崩溃恢复。P5 不新增多跳转发依赖；TTL/correlation 在 H3.1 前不构成硬保证。
 
 **先写的测试**（TDD，先红）：
 
@@ -432,6 +464,7 @@ dsh-agent-teams-concourse/
 | `0.2.1-rc.5` | 通信/路由/UI 身份正确性、单一校验管线、AST 边界与发布/测试门禁加固；出品人已验收 | — |
 | `0.2.1-rc.6` | H3.0 协议、不变量测试、RateLimiter 有界化与工程契约收口；最后一轮泛化硬化；施工完成待验收 | 不需要（仅递增 rc） |
 | `0.2.1-rc.7` | wake 投递、全局唤醒预算账域与运行期自环修复；TTL/correlation 登记 H3.1 | 不需要（仅递增 rc） |
+| `0.2.1-rc.8` | 官方路径 wake 闭环、限流乱序、self 容量、缺身份留痕与确定性小修 | 不需要（仅递增 rc） |
 | `0.3.0-rc.1` | P5 探针 MVP | **需要**（动第二位） |
 | `0.3.x-rc.N` | H3.1 事务/恢复实现，随后 P6 修正与遮蔽降级 | 不需要 |
 | `0.4.0-rc.1` | P7 + P8 | **需要** |
@@ -462,8 +495,8 @@ dsh-agent-teams-concourse/
 | 12 | 静默判定（quiescence）未实现 | 无法终止"礼貌性互推" | T-10 / P7 |
 | 13 | 探针（FR-D 全 20 条）未实现 | 第二册需求整体未交付 | P5 / P6 |
 | 14 | `approve` 崩溃恢复未完成：replay 忽略 `approve-intent/vertex-start/rollback`，中断审批仍可再次 approve | 可能双活/遗留 Activation，无对账依据 | H3 恢复协议（ADR D-0.2.1-rc.3）；当前不宣称完整崩溃恢复 |
-| 15 | 真实投递成功后的 commit/写盘失败仍可能造成 inbox/内存/JSONL 分叉 | 假失败、重复或预算不一致 | H3 事务对账；不得靠 append 换序假装修复 |
-| 16 | dedup/admission 不随 replay 恢复（事件暂未存 dedupKey/消费回执） | 重启后幂等窗口失效，旧票据不可恢复 | H3 事件格式与对账协议 |
+| 15 | 真实投递成功后的 commit/写盘失败仍可能造成 inbox/内存/JSONL 分叉（含 RC8-1 requeue 成功后的 commit 失败） | 假失败、重复或预算不一致 | H3 事务对账；不得靠 append 换序假装修复 |
+| 16 | dedup/admission 不随 replay 恢复（事件暂未存 dedupKey/消费回执；含 RC8-1 parked next-turn 票据） | 重启后幂等窗口失效，旧票据不可恢复 | H3 事件格式与对账协议 |
 | 17 | `team_plan` 的 create+submit 仍有两个 append 的部分成功窗口 | 失败后可能留下无入口的 draft | H3 组合命令可恢复语义 |
 | 18 | archived concourse 未作为通信硬边界；admission 票据未绑定 from/to/content | 领域 API/未来工具接线存在误投递面 | P7/P8 前补领域边界与票据校验 |
 | 19 | JSONL torn-tail 无隔离策略；坏行会使 service 跳过装配 | 停电/半写恢复需人工处理 | H3 故障注入后定策略，不静默丢事件 |
@@ -474,6 +507,9 @@ dsh-agent-teams-concourse/
 | 24 | `withEdgeBudgets` 对同 key 改预算仍保留旧 remaining/fuse | 当前 `team_link` 不改预算，未来改预算可能出现余额超过新额度或旧熔断残留 | T-14 / P7；先定义重基或重置，禁止夹入无行为变化重构 |
 | 25 | AgentDirectory、suggest/validate/UI 投影等仍有重复查找或遍历；mock catalog 双份维护 | 当前默认 8 顶点下不构成高危性能故障，大目录/高频投影时可能放大 | 不阻塞 P5；以基准或对应 P7/P8 功能为触发，避免连续优化轮次 |
 | 26 | hops 由调用方自报且未随 DeliveryRequest/source 传播；correlationId 也未形成端到端绑定 | FR-C7 的 TTL 与 FR-C2 的 request-reply 在真实多跳链路不构成硬保证；负数/伪造 hops 可绕过 | H3.1 票据/链元数据与可信父票据一并设计；修复前文档明确降级，P5 不新增多跳依赖 |
+| 27 | 裸 model 在多个 provider 同 id、spec 省略 provider 时，effort 预检只取目录第一条 | 可能误拒后续 provider 支持组合，或把实际继承路由不支持的组合拖到 start 才失败 | 后续 Catalog 正确性用例：同名多路由且省略 provider 时要求显式 provider，或纳入父有效路由；不与 #20 性能项混修 |
+| 28 | `check-no-assets` 的 emoji 正则只覆盖补充平面，漏掉 ⭐/⌚/❤ 等 BMP 码位 | 当前树未见对应违规，但门禁存在假阴性 | P9/下次触及资产门禁时以 Unicode 语义加 known-bad fixture；不为它单独开硬化轮次 |
+| 29 | 多个 kernel 导出只剩测试自证（`contentDigest` / `completeGraphPairs` / `formatOverviewLine` / normalize wrapper）；`scripts/_mount-concourse.cjs` 是无备份写 profile 的一次性留档 | 维护面与误用风险，当前无运行时故障 | P9 发布物裁剪时决定保留为内部 API 或删除；旧挂载脚本移除前须确认无引用 |
 
 ---
 
