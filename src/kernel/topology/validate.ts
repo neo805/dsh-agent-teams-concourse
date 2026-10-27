@@ -13,6 +13,7 @@ import { classify } from './tier.js';
 export type ValidationIssue = SchemaIssue;
 
 export interface CapacityLimits {
+  /** 实际会由 substrate 拉起的子顶点上限（self 根不占宿主活体子代名额）。 */
   maxVertices: number;
 }
 
@@ -30,11 +31,12 @@ export function validateConcourse(
   };
   const maxVertices = limits.maxVertices ?? DEFAULT_LIMITS.maxVertices;
 
-  // ── 容量（计划期报错，而非运行时） ──
-  if (c.vertices.length > maxVertices) {
+  // ── 容量（计划期报错，而非运行时）：self 是当前领队，不占 maxActiveSubagents ──
+  const spawnedCount = c.vertices.filter((v) => v.origin !== 'self').length;
+  if (spawnedCount > maxVertices) {
     push(
       'TOO_MANY_VERTICES',
-      `顶点数 ${c.vertices.length} 超过上限 ${maxVertices}（宿主 maxActiveSubagents 默认值）`,
+      `派生子顶点数 ${spawnedCount} 超过上限 ${maxVertices}（宿主 maxActiveSubagents 默认值）`,
       'vertices',
     );
   }
