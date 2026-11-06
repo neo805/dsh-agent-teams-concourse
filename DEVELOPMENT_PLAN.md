@@ -2,7 +2,7 @@
 
 |  |  |
 | --- | --- |
-| 计划版本 | **v2.7**（2026-10-27）· 取代 v2.6（2026-10-27） |
+| 计划版本 | **v2.8**（2026-10-31）· 取代 v2.7（2026-10-27） |
 | 需求依据 | `docs/REQUIREMENTS.html` v2.0（唯一需求依据） |
 | 协作规范 | `COLLABORATION.md` v2.0（角色、版本、验证阶梯、交付清单） |
 | 输入 | 两份调研底稿（`docs/*-report.html`）· 13 份 research 底稿 · P0–P4 开发会话与真机测试记录 · 第 4–7 期第三方全景审计（2026-10-25） |
@@ -493,7 +493,7 @@ dsh-agent-teams-concourse/
 | 5 | 子节点工具分流注册未接线 | 子节点可能拿到全量工具 | T-6 / P7-P8，阻塞点在宿主身份面 |
 | 6 | `catalog` 无 `tier` 数据源 | cheap/premium 目标档候选池必空、走回退；`tier` 目前只是标签 | T-7 / P7（本地映射表） |
 | 7 | 未知字段守卫（did-you-mean）真机不可达 | Web GUI 在 `execute` 前按 schema 归一化入参，笔误降级为"缺字段" | **上游行为**，结案；离线/直调路径仍有 17 条测试覆盖 |
-| 8 | `toolFilter` 改为挂载后收口（0.2.1 起 start 期不再接受） | 与声明式透传相比有毫秒级生效窗口 | 接受（`D-P3-runtime-0.2.1`）；失败即 dispose + fail-loud |
+| 8 | `toolFilter` 改为挂载后收口（0.2.1 起 start 期不再接受） | 与声明式透传相比有毫秒级生效窗口 | 接受（`D-P3-runtime-0.2.1`）；失败即尝试 dispose + fail-loud；dispose 也失败时的孤儿窗口见 #33 |
 | 9 | `inject` 新增 `agents` | 宿主缺该服务时插件按 cordis 语义不激活（fail-loud，不静默降级） | 接受 |
 | 10 | `create` 事件内嵌整份 spec | 台账随任务文本线性膨胀 | T-8 / P7（快照 + 哈希引用） |
 | 11 | `contextMode: fork` 未实现 | 不能"带父记忆起新顶点" | T-2 / P7 |
@@ -509,12 +509,18 @@ dsh-agent-teams-concourse/
 | 21 | dedup/admission 内存窗口无界；成功 `team_send` 产生 3 次同步 JSONL 写；启动仍深拷贝整份事件流 | 长驻进程内存增长、消息路径阻塞、启动峰值偏高 | H3 随幂等窗口/事务批次/快照压缩一起设计，禁止简单改异步或加缓冲 |
 | 22 | `PlanCard` 未进入运行期组件树；无回调时动作按钮仍可点击 | 计划卡不可达、未来接线后出现假 affordance | P7 与 T-3 数据桥、审批动作接线一起验收；接线前不宣称计划卡可用 |
 | 23 | `./client` types 对应的 `dist/client/index.d.cts` 仅含 `export {}` | 宿主运行不受影响，TS 消费方得不到 manifest 暗示的导出 | T-13 / P9；用消费包 + tsc 做语义验收，不停留在文件存在检查 |
-| 24 | `withEdgeBudgets` 对同 key 改预算仍保留旧 remaining/fuse | 当前 `team_link` 不改预算，未来改预算可能出现余额超过新额度或旧熔断残留 | T-14 / P7；先定义重基或重置，禁止夹入无行为变化重构 |
+| 24 | `withEdgeBudgets` 对同 key 改预算仍保留旧 remaining/fuse | 未来改预算可能出现余额超过新额度或旧熔断残留（当前 `team_link` 不接收 budget 参数，但 open-existing 会丢失既有预算，见 #32） | T-14 / #32 / P7；先定义重基或重置，禁止夹入无行为变化重构 |
 | 25 | AgentDirectory、suggest/validate/UI 投影等仍有重复查找或遍历；mock catalog 双份维护 | 当前默认 8 顶点下不构成高危性能故障，大目录/高频投影时可能放大 | 不阻塞 P5；以基准或对应 P7/P8 功能为触发，避免连续优化轮次 |
 | 26 | hops 由调用方自报且未随 DeliveryRequest/source 传播；correlationId 也未形成端到端绑定 | FR-C7 的 TTL 与 FR-C2 的 request-reply 在真实多跳链路不构成硬保证；负数/伪造 hops 可绕过 | H3.1 票据/链元数据与可信父票据一并设计；修复前文档明确降级，P5 不新增多跳依赖 |
 | 27 | 裸 model 在多个 provider 同 id、spec 省略 provider 时，effort 预检只取目录第一条 | 可能误拒后续 provider 支持组合，或把实际继承路由不支持的组合拖到 start 才失败 | 后续 Catalog 正确性用例：同名多路由且省略 provider 时要求显式 provider，或纳入父有效路由；不与 #20 性能项混修 |
 | 28 | `check-no-assets` 的 emoji 正则只覆盖补充平面，漏掉 ⭐/⌚/❤ 等 BMP 码位 | 当前树未见对应违规，但门禁存在假阴性 | P9/下次触及资产门禁时以 Unicode 语义加 known-bad fixture；不为它单独开硬化轮次 |
 | 29 | 多个 kernel 导出只剩测试自证（`contentDigest` / `completeGraphPairs` / `formatOverviewLine` / normalize wrapper）；`scripts/_mount-concourse.cjs` 是无备份写 profile 的一次性留档 | 维护面与误用风险，当前无运行时故障 | P9 发布物裁剪时决定保留为内部 API 或删除；旧挂载脚本移除前须确认无引用 |
+| 30 | `team_send` 已消费票据在 live 重放时仍可再次进入准入；`substrate` 包装正文与发送侧原始正文使用不同 dedup 身份 | 同一消息可二次 deliver、二次扣预算 | rc.9：按实际投递内容统一 canonical admission identity，并补两次 pre-step 回归 |
+| 31 | 无 text 块的图片/文件消息被 `text ?? ''` 折叠为同一空正文 | 不同附件可被误判 `DUPLICATE` | rc.9 与 #30 同修：身份覆盖完整 `ContentBlock[]` |
+| 32 | `team_link(open)` 对已有边整条替换，未携带 `rate`/`budget`；request-reply 自动反向边的所有权也未定义 | 重开边会静默解除既有速率与预算约束 | rc.9：先定义 open-existing 的更新语义，再统一 live/replay 归约；现有“当前不改预算”口径作废 |
+| 33 | `restrict` 失败后 `dispose` 也失败时，清理异常被吞，Activation 无 handle/`vertex-start` 可对账 | 可能留下未收口、仍存活的孤儿子代理 | H3.1 partial-start/orphan 故障矩阵；不靠静默吞错解决 |
+| 34 | 建议链未接通：`profileTask` 无生产调用、`signals[]` 未进工具输出、`contextWindow` 未被 host catalog 透传；`effective` 只是 spec/inherit 回写 | FR-B2/B3/B7 被过度标为已实现；用户看到的“生效路由”不是宿主事实 | 需求文档 v2.1 已降级；实现归 P7，不在 rc.9 夹带 |
+| 35 | `pack-smoke` 以工作区符号链接作为链接源，Node 24 下无法解析声明包的传递依赖 | `pnpm verify` 在 pack-smoke 处失败，发布门禁不可用 | rc.9：链接 `realpathSync(source)`，并补嵌套符号链接 known-bad 夹具 |
 
 ---
 

@@ -3,6 +3,14 @@
 本项目遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/) 与
 [语义化版本](https://semver.org/lang/zh-CN/)。版本变更须在此登记。
 
+## [Unreleased] — 2026-10-31 · 首推前文档校准与脱敏
+
+### Changed
+
+- README 双语与需求文档 v2.1 按 2026-10-27 审查证据校准：自动建议、可解释信号、真实 `effective` 路由和 live 幂等去重不再标为完全实现。
+- 开发计划 §9 新增 #30–#35：live 票据重放、非文本消息身份、open-existing 丢配置、启动双失败孤儿、建议链/`effective` 契约失真、pack-smoke 符号链接门禁。
+- 新增 `research/14-community-team-plugins-survey.md`；`.research/` 本地外部原型树加入忽略清单；调研文档中的第三方个人邮箱隐去。
+
 ## [0.2.1-rc.8] — 2026-10-27 · 审查后实证修复
 
 ### Added

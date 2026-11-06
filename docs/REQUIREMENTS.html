@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>dsh-agent-teams-concourse · 需求文档 v2.0</title>
+<title>dsh-agent-teams-concourse · 需求文档 v2.1</title>
 <style>
 /* ============================================================
    本文件沿用两份调研报告的视觉口径（与本插件主张一致）：
@@ -126,7 +126,7 @@ footer{margin-top:50px;padding-top:18px;border-top:1px solid var(--line);color:v
 <nav class="toc">
   <div class="brand">
     <b>dsh-agent-teams-concourse</b>
-    <span>需求文档 · v2.0</span>
+    <span>需求文档 · v2.1</span>
   </div>
   <a class="lv1" href="#s0">0 · 本版说明与对齐状态</a>
   <a class="lv1" href="#s1">1 · 定位与边界</a>
@@ -165,15 +165,15 @@ footer{margin-top:50px;padding-top:18px;border-top:1px solid var(--line);color:v
 <main>
 
 <section class="cover">
-  <div class="eyebrow">Requirements · v2.0 · 2026-10-25</div>
+  <div class="eyebrow">Requirements · v2.1 · 2026-10-31</div>
   <h1>dsh-agent-teams-concourse · 需求文档</h1>
   <p class="sub">DSH 的<strong>组织层</strong>：把「谁和谁能通信、每个执行单元用什么模型与思考强度、产出如何回到主线」变成可编辑的一等数据。本文件合并两册调研，是<strong>唯一的需求依据</strong>；调研原文保留在 <code>docs/</code> 下作为背景与证据。</p>
 
   <div class="meta">
     <table>
-      <tr><td>需求版本</td><td>v2.0（本版：把两份调研报告合并为一册，并纳入 P2 路线决议对架构的修正）</td></tr>
+      <tr><td>需求版本</td><td>v2.1（v2.0 合并调研并纳入路线 A；v2.1 按 2026-10-27 审查证据校准 B2/B3/B7/C9 状态）</td></tr>
       <tr><td>取代</td><td><code>docs/dsh-agent-teams-concourse-report.html</code> §7 与 <code>docs/dsh-side-inquiry-probe-report.html</code> §7 的规范性地位；两份原文继续作为调研底稿引用</td></tr>
-      <tr><td>实现基线</td><td>插件 <code>0.2.0</code> · DSH <code>0.2.1-rc.2</code> · Node <code>^22.19 || &gt;=24</code> · 测试 <code>349/349</code>（44 文件）</td></tr>
+      <tr><td>实现基线</td><td>插件 <code>0.2.1-rc.8</code> · DSH <code>0.2.1-rc.2</code> · Node <code>^22.19 || &gt;=24</code> · 测试 <code>480/480</code>（60 文件）；pack-smoke 在当前 Node 24 上待 rc.9 修复</td></tr>
       <tr><td>交付形态</td><td>DSH bundle（<code>cordis.patch.yml</code> 一条插件行）+ 宿主侧服务与 <code>team_*</code> 工具 + 客户端右侧栏</td></tr>
       <tr><td>阅读指引</td><td>只读一段：<a href="#s0">§0 对齐状态</a>。<br>要判需求是否成立：<a href="#s2">§2</a> 与 <a href="#s7">§7</a>。<br>要开工：<a href="#s4">§4</a> + <a href="#s8">§8</a>。</td></tr>
     </table>
@@ -208,11 +208,16 @@ footer{margin-top:50px;padding-top:18px;border-top:1px solid var(--line);color:v
   <table class="t">
     <tr><th>组</th><th>主题</th><th class="c">条数</th><th class="c">已实现</th><th class="c">部分</th><th class="c">未实现</th><th>落地版本</th></tr>
     <tr><td class="mono">FR-A</td><td>拓扑：声明式数据、谱系、审批闸门、容量校验</td><td class="c">6</td><td class="c">4</td><td class="c">1</td><td class="c">1</td><td>0.1.0（A3 待 P8）</td></tr>
-    <tr><td class="mono">FR-B</td><td>逐顶点定档、可解释建议、台账、校准闭环</td><td class="c">7</td><td class="c">5</td><td class="c">1</td><td class="c">1</td><td>0.1.0 / 0.2.0（B5 B6 待 P7）</td></tr>
-    <tr><td class="mono">FR-C</td><td>通信硬约束：开放边集、唤醒、终止、预算、留痕</td><td class="c">12</td><td class="c">10</td><td class="c">0</td><td class="c">2</td><td>0.1.0（C3 C8 待 P7/P8）</td></tr>
+    <tr><td class="mono">FR-B</td><td>逐顶点定档、可解释建议、台账、校准闭环</td><td class="c">7</td><td class="c">2</td><td class="c">4</td><td class="c">1</td><td>0.1.0 / 0.2.0（B2/B3/B7 待 P7，B5/B6 待 P7）</td></tr>
+    <tr><td class="mono">FR-C</td><td>通信硬约束：开放边集、唤醒、终止、预算、留痕</td><td class="c">12</td><td class="c">7</td><td class="c">3</td><td class="c">2</td><td>0.1.0（C3/C8 待 P7/P8，C9 待 rc.9）</td></tr>
     <tr><td class="mono">FR-D</td><td>旁路探针：隔离、handle 回注、丢弃、晋升</td><td class="c">20</td><td class="c">0</td><td class="c">0</td><td class="c">20</td><td>未开工（P5–P6）</td></tr>
     <tr><td class="mono">NFR</td><td>惰性、韧性、零资产、持久化、fail-loud…</td><td class="c">14</td><td class="c">11</td><td class="c">0</td><td class="c">3</td><td>0.1.0 / 0.2.0（11/13/14 待 P5）</td></tr>
   </table>
+  </div>
+
+  <div class="callout info">
+    <span class="tag">v2.1 状态校准（2026-10-27 审查）</span>
+    <p>真实工具路径没有消费难度画像、没有输出 <code>signals[]</code>，也没有把宿主 <code>contextWindow</code> 传进建议器；派发记录的 <code>effective</code> 只是 spec 声明值或 <code>inherit</code> 标记。因此 FR-B2/B3/B7 降为部分。<code>team_send</code> 的 live 票据重放与非文本消息身份仍有缺陷，FR-C9 也降为部分；修复归 <code>0.2.1-rc.9</code>。</p>
   </div>
 
   <div class="callout warn">
@@ -425,12 +430,12 @@ footer{margin-top:50px;padding-top:18px;border-top:1px solid var(--line);color:v
   <table class="t">
     <tr><th class="c">ID</th><th>需求</th><th>判据 / 说明</th><th class="c">状态</th></tr>
     <tr><td class="c mono">FR-B1</td><td><strong>逐顶点手动定档</strong>：每行的模型、强度、预算、工具范围、深度都可改，改动立即反映到总预算与拓扑校验</td><td>与竞品的关键差别：<strong>审批后仍可改</strong>（走显式「改拓扑」确认），而不是写死冻结</td><td class="c"><span class="b ok">已实现</span></td></tr>
-    <tr><td class="c mono">FR-B2</td><td><strong>自动定档建议（可一键接受）</strong>：给出 <code>{model, reasoningEffort, tokenTier, toolFilter, maxDepth, rationale[], confidence}</code></td><td>启发式出初值 + 可选 LLM 精修（D-6），失败回落启发式</td><td class="c"><span class="b ok">已实现</span><span class="ev">（启发式；LLM 精修待 P7）</span></td></tr>
-    <tr><td class="c mono">FR-B3</td><td><strong>建议必须可解释</strong>：输出含 <code>signals[]</code>，逐条说明命中了哪个难度维度</td><td>不可解释的建议不予采纳；借鉴 auto-router 最成功的一点</td><td class="c"><span class="b ok">已实现</span></td></tr>
+    <tr><td class="c mono">FR-B2</td><td><strong>自动定档建议（可一键接受）</strong>：给出 <code>{model, reasoningEffort, tokenTier, toolFilter, maxDepth, rationale[], confidence}</code></td><td>启发式出初值 + 可选 LLM 精修（D-6），失败回落启发式</td><td class="c"><span class="b warn">部分</span><span class="ev">（仅显式 profile；自动画像与 contextWindow 待 P7）</span></td></tr>
+    <tr><td class="c mono">FR-B3</td><td><strong>建议必须可解释</strong>：输出含 <code>signals[]</code>，逐条说明命中了哪个难度维度</td><td>不可解释的建议不予采纳；借鉴 auto-router 最成功的一点</td><td class="c"><span class="b warn">部分</span><span class="ev">（kernel 产出 signals，工具输出尚未携带；P7）</span></td></tr>
     <tr><td class="c mono">FR-B4</td><td><strong>fail-loud 校验，绝不静默降级</strong>：model 必须在 <code>listProviders()</code> 目录中；effort 必须被 <code>resolveModelInfo().efforts[]</code> 支持；越界直接拒绝并给可选值</td><td>与宿主 <code>resolveCallConfig</code> 不夹档的行为一致</td><td class="c"><span class="b ok">已实现</span></td></tr>
     <tr><td class="c mono">FR-B5</td><td><strong>校准闭环</strong>：记录「建议 → 最终采纳值」的差异落盘为 <code>suggestions.jsonl</code>，周期性生成校准报告（哪些维度总被上调/下调）</td><td>auto-router 阈值 4→2 的教训：纯启发式不拿真实语料回归几乎必然校准失败</td><td class="c"><span class="b warn">部分</span><span class="ev">（语料回归在；suggestions.jsonl 与校准报告待 P7）</span></td></tr>
     <tr><td class="c mono">FR-B6</td><td><strong>预设只是快捷填充，不是前提</strong>：任何任务都可完全不用预设而逐字段指定；预设缺失不得导致功能不可用</td><td>修正「预设优先 → 实际只剩两个选择」的退化</td><td class="c"><span class="b bad">未实现</span></td></tr>
-    <tr><td class="c mono">FR-B7</td><td><strong>决策台账：请求 vs 生效</strong>：每次派发记录「请求档位 → 实际生效 → 被忽略字段 <code>ignored[]</code> → 结果」，并提供成本反事实对照</td><td>对照必须读 <code>requested.model</code> 而非 <code>effective.model</code>；<code>inherit_ratio = 100%</code> 直接指向根因</td><td class="c"><span class="b ok">已实现</span></td></tr>
+    <tr><td class="c mono">FR-B7</td><td><strong>决策台账：请求 vs 生效</strong>：每次派发记录「请求档位 → 实际生效 → 被忽略字段 <code>ignored[]</code> → 结果」，并提供成本反事实对照</td><td>对照必须读 <code>requested.model</code> 而非 <code>effective.model</code>；<code>inherit_ratio = 100%</code> 直接指向根因</td><td class="c"><span class="b warn">部分</span><span class="ev">（effective 仍是 spec/inherit，非宿主回读；P7）</span></td></tr>
   </table>
   </div>
 
@@ -448,7 +453,7 @@ footer{margin-top:50px;padding-top:18px;border-top:1px solid var(--line);color:v
     <tr><td class="c mono">FR-C6</td><td><strong>广播只入共享板，不唤醒任何顶点</strong>：要唤醒必须逐个显式定向</td><td><code>mode:'board'</code> 时 deliver 的 wake 恒为 never</td><td class="c"><span class="b ok">已实现</span></td></tr>
     <tr><td class="c mono">FR-C7</td><td><strong>跳数 TTL</strong>：消息携带 hops / ttl；<code>hops &gt; ttl</code> 只记录不投递并标记 <code>HOP_LIMIT</code></td><td>终止类约束的第一道</td><td class="c"><span class="b warn">部分</span><span class="ev">（hops 仅调用方自报且不传播；H3.1 前非硬保证）</span></td></tr>
     <tr><td class="c mono">FR-C8</td><td><strong>静默判定（quiescence）</strong>：某信道连续 K 轮（默认 2）无新增事实（纯确认/致谢/重述）→ 冻结该信道，后续只入板</td><td>唯一能真正终止「礼貌性互推」的机制</td><td class="c"><span class="b bad">未实现</span><span class="ev">（P7）</span></td></tr>
-    <tr><td class="c mono">FR-C9</td><td><strong>幂等去重</strong>：按 <code>hash(from|to|correlationId|内容摘要)</code> 去重，重复投递丢弃并计数</td><td>重放与回环拦截</td><td class="c"><span class="b ok">已实现</span></td></tr>
+    <tr><td class="c mono">FR-C9</td><td><strong>幂等去重</strong>：按 <code>hash(from|to|correlationId|内容摘要)</code> 去重，重复投递丢弃并计数</td><td>重放与回环拦截</td><td class="c"><span class="b warn">部分</span><span class="ev">（live 票据重放与非文本身份待 rc.9；重启用窗口仍属 H3.1）</span></td></tr>
     <tr><td class="c mono">FR-C10</td><td><strong>通道预算 + 全局熔断</strong>：边超额只熔断该边；全局超额暂停所有 <code>wake≠never</code> 投递，<strong>仅人工恢复</strong></td><td>熔断后系统仍可被人类读取与干预，而非整体瘫痪</td><td class="c"><span class="b ok">已实现</span></td></tr>
     <tr><td class="c mono">FR-C11</td><td><strong>回声计数与约束命中留痕</strong>：每条边统计 投递 / 唤醒 / 去重 / 命中约束；任何被拒投递都写流水</td><td>否则用户以为消息丢了——比引发风暴更难排查</td><td class="c"><span class="b ok">已实现</span></td></tr>
     <tr><td class="c mono">FR-C12</td><td><strong>多层收口，权威判定在收件侧</strong>：① toolFilter 收口 ② <strong>收件箱准入权威判定</strong> ③ guard 兜底 ④ 全量留痕</td><td>第②层与「发送方是谁、用什么工具」完全解耦，语义上等价于服务层闸门</td><td class="c"><span class="b ok">已实现</span><span class="ev">（①②④；③在路线 A 下无对象）</span></td></tr>
@@ -810,7 +815,7 @@ probe.discarded     {id, by, level}
 </section>
 
 <footer>
-  dsh-agent-teams-concourse · 需求文档 v2.0 · 2026-10-25<br>
+  dsh-agent-teams-concourse · 需求文档 v2.1 · 2026-10-31<br>
   合并自：docs/dsh-agent-teams-concourse-report.html（v1.2）· docs/dsh-side-inquiry-probe-report.html（v1.0）<br>
   实现基线 0.2.0 · DSH 0.2.1-rc.2 · 测试 349/349 · 零美术资产
 </footer>

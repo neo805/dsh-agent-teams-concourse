@@ -18,8 +18,8 @@ DSH 的**组织层**插件：把「谁和谁能通信、每个执行单元用什
 |---|---|
 | 拓扑即数据：`team_topology` 声明顶点 + 开放边集；tier 判定（T0/T1a/T1b/T1.5/T2a）；计划期容量与预算校验 | ✅ |
 | 逐顶点定档：`provider` / `model` / `reasoningEffort` / `budget` / `toolFilter` / `maxDepth`，越界 fail-loud | ✅ |
-| 自动定档建议（启发式，输出 `rationale[]` / `signals[]` / `confidence`） | ✅ |
-| 通信硬约束：开放边集 deny-by-default、`wake` 默认 never、跳数 TTL、幂等去重、速率降级、边/全局预算熔断 | ✅ |
+| 自动定档建议（启发式，输出 `rationale[]` / `signals[]` / `confidence`） | ⚠️ 部分：仅对显式声明 profile 的任务生效；`signals[]` 与宿主上下文窗口尚未穿透真实工具路径 |
+| 通信硬约束：开放边集 deny-by-default、`wake` 默认 never、跳数 TTL、幂等去重、速率降级、边/全局预算熔断 | ⚠️ 部分：主路径可用，但 live 票据重放与非文本消息身份待 rc.9；H3.1 前跳数 TTL 不是硬保证 |
 | **模型准入侧权威拦截** + 真实路径矩阵（工具 / `agent-message` / 伪造 sender，闭边消息不进入模型） | ✅ |
 | 计划审批闸门（`team_plan` 只提交不拉起），运行期零组队审批 | ✅ |
 | JSONL 台账（决策 / 通信 / 预算 / 回声计数）+ 重启回放恢复（seq 与运行期改边可回放；离线目标 fail-loud） | ✅ |
@@ -133,6 +133,15 @@ experimental 底座的漂移绑架。
 - 未发布到 npm：从 tarball 安装。
 - 工具名与官方 `team_task_*` 同族相邻（无重名），靠每个工具的 description 约定边界：
   **concourse 管拓扑与路由，官方管成员与任务**。
+- **rc.9 待修的正确性问题**（2026-10-27 审查发现）：同一 `team_send` 票据在 live 重放时可能二次投递并二次扣账；
+  无 text 块的图片/文件消息会被折叠成同一去重身份；重开已有边会丢失其 `rate`/`budget`。在 rc.9 落地前，
+  不要依赖 live 幂等或“重开边保留配置”。
+- 派发记录中的 `effective` 目前是 spec 声明值或 `inherit` 标记，**不是从宿主读回的真实路由**；
+  FR-B2/B3/B7 因此仍为部分实现，待 P7 接通画像/`signals[]`/路由回显链。
+- **当前 Node 24 下打包门禁未通过**：`pack-smoke` 在嵌套符号链接依赖上解析失败，待 realpath 修复；
+  typecheck、lint、boundaries、assets 与 480 条测试仍通过。
+- 不要与 `dsh-team-autopilot` 同时使用两套团队心智模型：它读官方 `ctx.agentTeams` 名册，
+  而 concourse 使用自建顶点注册表，两者状态不可互换。
 
 ## 作者与维护声明
 

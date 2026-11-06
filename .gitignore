@@ -2,6 +2,7 @@ node_modules/
 dist/
 coverage/
 tmp/
+.research/
 *.tgz
 *.local
 .dsh-test-profile/

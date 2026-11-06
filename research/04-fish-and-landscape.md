@@ -34,8 +34,8 @@
 | 默认分支 | `main` | API |
 | Topics | agent-teams, ai-agent, deepseek-harness, dsh, dsh-plugin, multi-agent, typescript | API |
 | npm 下载量 | 月 2,356 / 周 2,356（即**几乎全部集中在最近一周**，全新包） | npm search |
-| npm maintainer | `fish-under-sea`（1661715118@qq.com） | npm |
-| npm `author` 字段 | **仍是上游作者**「程序员阿江 / Relakkes / relakkes@gmail.com」 | npm 版本元数据 |
+| npm maintainer | `fish-under-sea`（联系邮箱已隐去） | npm |
+| npm `author` 字段 | **仍是上游作者**「程序员阿江 / Relakkes」（联系邮箱已隐去） | npm 版本元数据 |
 
 > ⚠️ **活跃度判断**：单作者、单 star、0 issue、9 天内从 `0.1.22` 连发到 `0.5.0`（中间经过 0.1.23…0.1.29 → 0.3.0 → 0.3.1 → 0.3.2 → 0.4.0 → 0.4.1 → 0.4.2 → 0.4.3 → 0.5.0），提交信息极其详尽（带根因分析、门禁断言、故意的 minor 版本理由）。**这是一个作者自己在高速迭代的个人项目，不是社区项目。**
 >
@@ -260,7 +260,7 @@
 | 10 | **dsh-team-rooms** | `dsh-team-rooms` · <https://github.com/PerryLink/dsh-team-rooms> | **扁平跨会话团队房间**：消息总线 + 共享任务板 + 审批门交接 + 共享时间线，DSH 重启后存活 | 有（Web 设置页：成员状态/任务板/时间线） | **已 RETIRED（2026-10-05）** —— 官方内置后被作者主动弃用 | npm registry |
 
 **关于 #4 与 `@wowyuarm/dsh-agent-team` 的核实结论（重要）**：
-`@wowyuarm/dsh-agent-team` **确实存在**，v0.1.0 → 0.2.1 全部版本都被标记 `deprecated: "moved to @contexera/dsh-agent-team / 已迁移到新包名"`。两者是**同一个项目、同一位维护者**（npm 用户 `wowyuarm` / wuyuang1007@gmail.com），`@contexera/` 是新名。Contexera README 明确写：「旧的 `@wowyuarm/dsh-agent-team` 停在 0.2.1，已标记废弃并指向新名；profile 换插件名即可，**数据无需迁移**。」
+`@wowyuarm/dsh-agent-team` **确实存在**，v0.1.0 → 0.2.1 全部版本都被标记 `deprecated: "moved to @contexera/dsh-agent-team / 已迁移到新包名"`。两者是**同一个项目、同一位维护者**（npm 用户 `wowyuarm`，联系邮箱已隐去），`@contexera/` 是新名。Contexera README 明确写：「旧的 `@wowyuarm/dsh-agent-team` 停在 0.2.1，已标记废弃并指向新名；profile 换插件名即可，**数据无需迁移**。」
 → 所以**它们不是两个竞品，是一个竞品的两个包名**。品类实际玩家数要按这个修正。
 
 ### 2.2 卫星 / 相邻插件（不自己实现组队，但属于同一品类生态）

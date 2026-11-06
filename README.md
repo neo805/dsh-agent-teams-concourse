@@ -24,8 +24,8 @@ one level deep**. Zero art assets: shape carries the semantics, colour only spee
 |---|---|
 | Topology as data: `team_topology` declares vertices + open edges; tier classification (T0/T1a/T1b/T1.5/T2a); plan-time capacity and budget validation | ✅ |
 | Per-vertex assignment: `provider` / `model` / `reasoningEffort` / `budget` / `toolFilter` / `maxDepth`, fail-loud when out of range | ✅ |
-| Auto-assignment suggestions (heuristic, with `rationale[]` / `signals[]` / `confidence`) | ✅ |
-| Hard communication constraints: deny-by-default open edge set, `wake` defaults to never, hop TTL, idempotent dedup, rate degradation, per-edge and global budget fuses | ✅ |
+| Auto-assignment suggestions (heuristic, with `rationale[]` / `signals[]` / `confidence`) | ⚠️ partial: only explicitly profiled tasks; `signals[]` and host context-window data are not yet surfaced through the real tool path |
+| Hard communication constraints: deny-by-default open edge set, `wake` defaults to never, hop TTL, idempotent dedup, rate degradation, per-edge and global budget fuses | ⚠️ partial: the core path works, but live ticket replay and non-text message identity are pending rc.9; hop TTL is not a hard guarantee before H3.1 |
 | **Model-admission authoritative gate** + real-path matrix (tool / `agent-message` / forged sender; closed-edge messages never enter the model) | ✅ |
 | Single plan-approval gate (`team_plan` submits and does not spawn); zero team-building approvals at runtime | ✅ |
 | JSONL ledger (decisions / comms / budget / echo counts) + replay on restart (seq and runtime edge changes replay; offline targets fail loud) | ✅ |
@@ -160,6 +160,20 @@ and reconciliation; the benefit is not being held hostage by an experimental sub
 - Tool names sit next to the official `team_task_*` family (no collisions); the boundary is
   stated in every tool description: **concourse owns topology and routing, the official
   layer owns members and tasks**.
+- **Pending correctness fixes for rc.9** (found in the 2026-10-27 review): a consumed
+  `team_send` ticket can be delivered and charged twice on live replay; non-text messages
+  with no text blocks collapse to one dedup identity; re-opening an existing edge drops its
+  `rate`/`budget`. Do not rely on live idempotence or edge configuration preservation until
+  rc.9 lands.
+- `effective` in the assignment record is currently the declared spec value or the
+  `inherit` marker, **not a route read back from the host**; FR-B2/B3/B7 are therefore
+  partial until P7 wires the profiling/signals/route-feedback chain.
+- **The packaging gate is currently red on Node 24**: `pack-smoke` cannot resolve a nested
+  symlinked dependency until the planned realpath fix; typecheck, lint, boundaries, assets
+  and the 480 tests still pass.
+- Do not run a second team concept alongside `dsh-team-autopilot`: it reads the official
+  `ctx.agentTeams` roster, while concourse keeps its own vertex registry; the two team views
+  are not interchangeable.
 
 ## Authorship and maintenance
 
