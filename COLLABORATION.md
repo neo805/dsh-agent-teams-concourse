@@ -250,15 +250,15 @@ machine-specific information.
 
 ## 10. 权限边界与对外动作
 
-- **`git push` 必须先问。** 本机 git 已与出品人的 GitHub 仓库规划名
-  `neo805/dsh-agent-teams-concourse` 对应（`package.json` 的 `repository` 字段已写），
-  但**本项目尚未在 GitHub 建仓**。建仓与首次推送都属于对外动作，须经出品人明确批准；
-  批准后 AI 可通过 `git` CLI 直接操作推送，此后**每次** push、打 tag 仍须逐次批准。
+- **`git push` 必须先问。** 公开仓库 `neo805/dsh-agent-teams-concourse` 已于
+  2026-11-06 建仓并完成首次推送，`main` 已跟踪 `origin/main`。此后**每次** push、
+  打 tag 仍须出品人逐次明确批准；AI 只能按批准范围通过 `git` CLI 操作，不得自行
+  扩大推送内容。
 - 提交（commit）可自行完成并保持本地领先（§8 第 10 步，装到 Desktop 之后即提交，
   **无需出品人验收**）。
 - **不得**：未经批准 push / 建仓、自行升大版本号、静默丢弃已知问题、把未验证的事说成
   已完成、在会话内直接替换正在运行的宿主或自身。
-- 仓库**不开启 Issues、不接受 Pull Requests**（见 CONTRIBUTING 约定，建仓后补）。
+- 仓库**不开启 Issues、不接受 Pull Requests**（见 `CONTRIBUTING.md`）。
 
 ## 11. 文档与隐私
 

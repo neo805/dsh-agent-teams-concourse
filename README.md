@@ -187,8 +187,8 @@ and reconciliation; the benefit is not being held hostage by an experimental sub
 - **Maintenance scope**: this is the producer's personal hobby (vibe-coding) project.
   Published for sharing only; **no commitment to maintenance or updates driven by external
   requirements**.
-- **Collaboration policy**: this repository **does not accept Issues or Pull Requests**.
-  Feel free to fork and evolve under the MIT licence.
+- **Collaboration policy**: this repository **does not accept Issues or Pull Requests**
+  (see [CONTRIBUTING.md](CONTRIBUTING.md)). Feel free to fork and evolve under the MIT licence.
 - **Disclaimer**: provided "as is", without warranty of any kind (see LICENSE). Evaluate
   before using it in production.
 

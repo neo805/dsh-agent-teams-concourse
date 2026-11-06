@@ -2,13 +2,13 @@
 
 |  |  |
 | --- | --- |
-| 计划版本 | **v2.8**（2026-10-31）· 取代 v2.7（2026-10-27） |
-| 需求依据 | `docs/REQUIREMENTS.html` v2.0（唯一需求依据） |
+| 计划版本 | **v2.8**（2026-11-06）· 取代 v2.7（2026-10-27） |
+| 需求依据 | `docs/REQUIREMENTS.html` v2.1（唯一需求依据） |
 | 协作规范 | `COLLABORATION.md` v2.0（角色、版本、验证阶梯、交付清单） |
-| 输入 | 两份调研底稿（`docs/*-report.html`）· 13 份 research 底稿 · P0–P4 开发会话与真机测试记录 · 第 4–7 期第三方全景审计（2026-10-25） |
+| 输入 | 两份调研底稿（`docs/*-report.html`）· 14 份 research 底稿 · P0–P4 开发会话与真机测试记录 · 第 4–7 期第三方全景审计（2026-10-25） |
 | 当前版本 | `0.2.1-rc.8`（0.1.0 = MVP 出口；0.2.0 = 运行时适配 + 真机 6 问题修复；0.2.1-rc.2 = T0–T4 可信性修复；rc.3 = 契约/通信/回放一致性硬化；rc.4 = 侧栏可发现性与自动打开；rc.5 = 通信/路由/UI 身份正确性与工程门禁加固；rc.6 = 硬化出口 + H3.0 协议；rc.7 = wake/全局唤醒预算/自环语义修复；rc.8 = 官方路径 wake 闭环 + 审查后实证修复） |
 | 基线环境 | DSH `0.2.1-rc.2` · Node `^22.19 || >=24` · pnpm 11.7 · 测试 **60 文件 / 480 测试** |
-| 目标仓库 | `neo805/dsh-agent-teams-concourse`（Public + MIT，**尚未建仓；建仓与首推须出品人批准**） |
+| 目标仓库 | [`neo805/dsh-agent-teams-concourse`](https://github.com/neo805/dsh-agent-teams-concourse)（Public + MIT，**2026-11-06 已建仓并完成首推**） |
 
 ---
 
@@ -529,11 +529,12 @@ dsh-agent-teams-concourse/
 | 操作 | 授权状态 | 内容 |
 | --- | --- | --- |
 | 本地 git | ✅ 已授权 | `main` 单主干；Conventional Commits；`test:` / `feat:` 成对体现 TDD；每次交付末提交 |
-| **建仓** | ⛔ **执行前报批** | `gh repo create neo805/dsh-agent-teams-concourse --public --source=. --remote=origin`（gh CLI 已登录 `neo805`，repo scope 齐备；`package.json` 的 `repository` 字段已就位） |
-| **push / tag** | ⛔ **逐次报批** | 建仓后首次推送；此后每次 push、打 tag 都须出品人明确批准。**tag 只在批准 push 时一并创建** |
+| **建仓** | ✅ 已执行（2026-11-06） | Public 仓库已创建，`origin` 指向 `https://github.com/neo805/dsh-agent-teams-concourse.git`；`package.json` 的 `repository` 字段一致 |
+| **首次推送** | ✅ 已执行（2026-11-06） | `main` 已建立上游跟踪并完成首次推送；**不打 tag** |
+| **push / tag** | ⛔ **此后逐次报批** | 每次后续 push、打 tag 都须出品人明确批准；**tag 只在批准 push 时一并创建** |
 | npm publish | ⛔ 不在本计划内 | 需要时另议（P9 决策点） |
 
-`.gitignore`：`node_modules/` · `dist/` · `coverage/` · `tmp/` · `*.tgz` · `*.local` · `.dsh-test-profile/` · `.tmp-*` · `.pnpm-store/`。
+`.gitignore`：`node_modules/` · `dist/` · `coverage/` · `tmp/` · `.research/` · `*.tgz` · `*.local` · `.dsh-test-profile/` · `.tmp-*` · `.pnpm-store/`。
 
 ---
 

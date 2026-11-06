@@ -152,7 +152,7 @@ experimental 底座的漂移绑架。
 - **出品人 / 仓库管理员**：KEI.NEO（@neo805）—— 人类出品人，对本仓库内容负责。
 - **维护范围**：这是出品人的个人业余（Vibe Coding）项目。公开仅为分享，
   **不对项目本身承诺任何源于外部需求的维护与更新**。
-- **协作政策**：本仓库**不开启 Issues，不接受 Pull Requests**。欢迎在 MIT 许可下 fork 后自由演进。
+- **协作政策**：本仓库**不开启 Issues，不接受 Pull Requests**（见 [CONTRIBUTING.md](CONTRIBUTING.md)）。欢迎在 MIT 许可下 fork 后自由演进。
 - **免责**：软件按"现状"提供，无任何明示或默示担保（详见 LICENSE）。生产环境使用前请自行评估。
 
 ## 致谢与许可
